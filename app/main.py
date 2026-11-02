@@ -23,6 +23,7 @@ from app.routes import (
     queue,
     settings,
     sheets,
+    suppression,
     warmup,
 )
 from app.services import warmup_worker, worker
@@ -67,6 +68,7 @@ for router in (
     activity.router,
     settings.router,
     sheets.router,
+    suppression.router,
     warmup.router,
 ):
     app.include_router(router)

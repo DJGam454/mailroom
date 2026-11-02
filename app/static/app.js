@@ -23,6 +23,11 @@ const PAGES = {
     sub: "The single sheet. Filter by campaign, status or search.",
     icon: "leads",
   },
+  suppression: {
+    title: "Suppression",
+    sub: "Permanent stop addresses. Checked before queueing and before send.",
+    icon: "shield",
+  },
   inboxes: {
     title: "Inboxes & domains",
     sub: "Connect domains and mailboxes. Rotation spreads volume across the pool.",
@@ -68,6 +73,7 @@ const NAV_GROUPS = [
       ["approvals", "Approvals", "approvals"],
       ["campaigns", "Campaigns", "campaigns"],
       ["leads", "Leads", "leads"],
+      ["suppression", "Suppression", "shield"],
     ],
   },
   {
@@ -123,6 +129,7 @@ const ICONS = {
   layers: '<path d="m12 2 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5"/><path d="m3 17 9 5 9-5"/>',
   send: '<path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4Z"/>',
   help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 4.6 1.4c-.6.8-1.6 1.2-1.6 2.4"/><path d="M12 17h.01"/>',
+  shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/>',
 };
 
 const STATUS = {
@@ -181,6 +188,7 @@ const state = {
   approvals: { items: [], total: 0, pools: {} },
   selectedApproval: null,
   approvalChecked: new Set(),
+  approvalBusy: false,
   leads: { items: [], total: 0, page: 1, page_size: 50, pages: 1 },
   leadFilters: { q: "", status: "", page: 1, pageSize: 50 },
   inboxes: [],
@@ -477,7 +485,7 @@ function renderShell() {
       </div>
     </div>
     <div id="modal-root"></div>
-    <div class="toast-wrap" id="toast-wrap"></div>
+    <div class="toast-wrap" id="toast-wrap" aria-live="polite" aria-atomic="false"></div>
   `;
 
   $("#campaign-select").addEventListener("change", (event) => {
@@ -556,6 +564,7 @@ async function renderPage() {
     else if (state.page === "approvals") await renderApprovals(token);
     else if (state.page === "campaigns") await renderCampaigns(token);
     else if (state.page === "leads") await renderLeads(token);
+    else if (state.page === "suppression") await renderSuppression(token);
     else if (state.page === "inboxes") await renderInboxes(token);
     else if (state.page === "deliverability") await renderDeliverability(token);
     else if (state.page === "warmup") await renderWarmup(token);
@@ -877,18 +886,43 @@ function moveApproval(delta) {
   renderApprovalDetail();
 }
 
+function removeApprovalLocal(draftId) {
+  const items = state.approvals.items || [];
+  const index = items.findIndex((item) => Number(item.draft_id) === Number(draftId));
+  if (index < 0) return;
+  const wasSelected = Number(state.selectedApproval) === Number(draftId);
+  state.approvals.items = items.filter((item) => Number(item.draft_id) !== Number(draftId));
+  state.approvals.total = Math.max(0, Number(state.approvals.total || 0) - 1);
+  if (wasSelected) {
+    const next = state.approvals.items[Math.min(index, state.approvals.items.length - 1)];
+    state.selectedApproval = next?.draft_id || null;
+  }
+  state.approvalChecked.delete(draftId);
+  setApprovalBadge(state.approvals.total);
+  renderApprovalList();
+  renderApprovalDetail();
+}
+
 async function approveDraft(draftId) {
+  if (state.approvalBusy) return;
+  state.approvalBusy = true;
   try {
     const result = await api(`/approvals/${draftId}/approve`, { method: "POST", body: JSON.stringify({}) });
     toast(`Queued via ${result.mailbox.email} for ${fmtDate(result.queue.scheduled_at)}`);
-    if (state.page === "leads") {
+    if (state.page === "approvals") {
+      removeApprovalLocal(draftId);
+      state.approvalBusy = false;
+      setTimeout(() => {
+        if (state.page === "approvals") loadApprovals().catch(() => {});
+      }, 250);
+    } else {
       await renderPage();
       await refreshApprovalBadge();
-    } else {
-      await loadApprovals();
     }
   } catch (error) {
     toast(error.message, "error");
+  } finally {
+    state.approvalBusy = false;
   }
 }
 
@@ -911,11 +945,14 @@ function openDenyModal(draftId) {
         body: JSON.stringify({ reason: formData.get("reason") || "", suppress: formData.get("suppress") === "on" }),
       });
       toast("Draft denied. Nothing was sent.");
-      if (state.page === "leads") {
+      if (state.page === "approvals") {
+        removeApprovalLocal(draftId);
+        setTimeout(() => {
+          if (state.page === "approvals") loadApprovals().catch(() => {});
+        }, 250);
+      } else {
         await renderPage();
         await refreshApprovalBadge();
-      } else {
-        await loadApprovals();
       }
     },
   });
@@ -1007,7 +1044,7 @@ function campaignCard(campaign) {
       <div class="mt-16"><div class="row small muted" style="justify-content:space-between"><span>Daily volume</span><span>${fmtNumber(campaign.sent_today)} / ${fmtNumber(campaign.daily_limit)}</span></div><div class="mt-8">${progress(campaign.sent_today, campaign.daily_limit, "green")}</div></div>
       <div class="row mt-16 wrap" style="justify-content:space-between;gap:8px">
         <div class="row wrap" style="gap:6px"><span class="chip gray">${esc(campaign.rotation_strategy.replaceAll("_", " "))}</span><span class="chip gray">${esc(campaign.timezone)}</span></div>
-        <div class="row" style="gap:6px"><button class="btn sm" data-action="toggle-campaign" data-id="${campaign.id}">${active ? "Pause" : "Activate"}</button><button class="btn sm primary" data-action="open-campaign" data-id="${campaign.id}">Open leads</button></div>
+        <div class="row" style="gap:6px"><button class="icon-btn bordered" data-action="campaign-settings" data-id="${campaign.id}" title="Campaign settings" aria-label="Campaign settings">${icon("settings", 14)}</button><button class="btn sm" data-action="toggle-campaign" data-id="${campaign.id}">${active ? "Pause" : "Activate"}</button><button class="btn sm primary" data-action="open-campaign" data-id="${campaign.id}">Open leads</button></div>
       </div>
     </div>
   `;
@@ -1074,6 +1111,66 @@ function openCampaignModal() {
       toast("Campaign created.");
       if (state.page === "campaigns") renderPage();
       else navigate("campaigns");
+    },
+  });
+}
+
+function openCampaignSettings(id) {
+  const campaign = state.campaigns.find((item) => Number(item.id) === Number(id));
+  if (!campaign) return;
+  let days = [1, 2, 3, 4, 5];
+  try {
+    const parsed = JSON.parse(campaign.working_days || "[]");
+    if (Array.isArray(parsed) && parsed.length) days = parsed.map(Number);
+  } catch {
+    days = [1, 2, 3, 4, 5];
+  }
+  openModal({
+    title: "Campaign settings",
+    sub: campaign.name,
+    wide: true,
+    body: `
+      <form id="modal-form">
+        <div class="form-grid">
+          <div class="field full"><label for="cs-name">Name</label><input class="input" id="cs-name" name="name" value="${esc(campaign.name)}" required /></div>
+          <div class="field"><label for="cs-status">Status</label><select class="select" id="cs-status" name="status">${["draft", "active", "paused", "archived"].map((value) => `<option value="${value}" ${campaign.status === value ? "selected" : ""}>${value}</option>`).join("")}</select></div>
+          <div class="field"><label for="cs-approval">Approval mode</label><select class="select" id="cs-approval" name="approval_mode"><option value="manual" ${campaign.approval_mode === "manual" ? "selected" : ""}>Manual approval</option><option value="auto" disabled>Auto (not active yet)</option></select></div>
+          <div class="field"><label for="cs-daily">Daily limit</label><input class="input" id="cs-daily" name="daily_limit" type="number" min="1" value="${esc(campaign.daily_limit)}" /></div>
+          <div class="field"><label for="cs-domain">Per-domain limit</label><input class="input" id="cs-domain" name="per_domain_limit" type="number" min="1" value="${esc(campaign.per_domain_limit)}" /></div>
+          <div class="field"><label for="cs-window-start">Window start</label><input class="input" id="cs-window-start" name="window_start" type="time" value="${esc(campaign.window_start)}" /></div>
+          <div class="field"><label for="cs-window-end">Window end</label><input class="input" id="cs-window-end" name="window_end" type="time" value="${esc(campaign.window_end)}" /></div>
+          <div class="field"><label for="cs-timezone">Timezone</label><input class="input" id="cs-timezone" name="timezone" value="${esc(campaign.timezone)}" /></div>
+          <div class="field"><label for="cs-rotation">Rotation</label><select class="select" id="cs-rotation" name="rotation_strategy">${["least_used", "round_robin", "weighted"].map((value) => `<option value="${value}" ${campaign.rotation_strategy === value ? "selected" : ""}>${value.replaceAll("_", " ")}</option>`).join("")}</select></div>
+          <div class="field"><label for="cs-gap-min">Minimum gap (seconds)</label><input class="input" id="cs-gap-min" name="min_gap_seconds" type="number" min="1" value="${esc(campaign.min_gap_seconds)}" /></div>
+          <div class="field"><label for="cs-gap-max">Maximum gap (seconds)</label><input class="input" id="cs-gap-max" name="max_gap_seconds" type="number" min="1" value="${esc(campaign.max_gap_seconds)}" /></div>
+        </div>
+        <div class="field mt-12"><label>Working days</label><div class="row wrap" style="gap:12px">${["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day, index) => `<label class="checkline"><input type="checkbox" name="days" value="${index + 1}" ${days.includes(index + 1) ? "checked" : ""}/> ${day}</label>`).join("")}</div></div>
+        <div class="notice mt-12">Auto-send is scaffolded in the schema but not active. All sends still require approval.</div>
+      </form>
+    `,
+    footer: `<button class="btn" data-action="close-modal">Cancel</button><button class="btn primary" type="submit" form="modal-form">Save campaign</button>`,
+    onSubmit: async (formData) => {
+      const days = formData.getAll("days").map(Number);
+      await api(`/campaigns/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          name: formData.get("name"),
+          status: formData.get("status"),
+          approval_mode: "manual",
+          daily_limit: Number(formData.get("daily_limit")),
+          per_domain_limit: Number(formData.get("per_domain_limit")),
+          window_start: formData.get("window_start"),
+          window_end: formData.get("window_end"),
+          timezone: formData.get("timezone"),
+          rotation_strategy: formData.get("rotation_strategy"),
+          min_gap_seconds: Number(formData.get("min_gap_seconds")),
+          max_gap_seconds: Number(formData.get("max_gap_seconds")),
+          working_days: days,
+        }),
+      });
+      await loadCampaigns();
+      toast("Campaign settings saved.");
+      renderPage();
     },
   });
 }
@@ -1246,6 +1343,49 @@ function openImportModal() {
       if (state.page === "leads") renderPage();
       else navigate("leads");
     },
+  });
+}
+
+/* ----------------------------- suppression ----------------------------- */
+
+async function renderSuppression(token) {
+  const data = await api("/suppression");
+  if (token !== state.renderToken) return;
+  const items = data.items || [];
+  $("#page").innerHTML = `
+    <div class="page-head">
+      <div><h1 class="page-title">Suppression</h1><div class="page-sub">${esc(PAGES.suppression.sub)}</div></div>
+      <div class="page-actions"><a class="btn" href="#/leads">${icon("leads", 14)} Back to leads</a></div>
+    </div>
+    <div class="grid dashboard-grid">
+      <div class="card">
+        <div class="card-head"><div><div class="card-title">Suppression list</div><div class="card-sub">${fmtNumber(items.length)} permanent stop address(es).</div></div></div>
+        <div class="table-wrap"><table class="table suppression-table"><thead><tr><th>Email</th><th>Reason</th><th>Added</th><th></th></tr></thead><tbody>${items.map((item) => `<tr><td><span class="mono" style="font-size:11px">${esc(item.email)}</span></td><td class="cell-muted">${esc(item.reason || "-")}</td><td class="cell-muted cell-nowrap">${esc(fmtDate(item.created_at))}</td><td class="cell-actions"><button class="btn xs ghost" data-action="suppression-remove" data-email="${esc(item.email)}">Remove</button></td></tr>`).join("") || `<tr><td colspan="4">${emptyState("No suppressed addresses", "Denied contacts with Never contact ticked appear here. You can also add one manually.", "shield")}</td></tr>`}</tbody></table></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><div><div class="card-title">Add a stop address</div><div class="card-sub">This blocks campaign queueing and sending.</div></div></div>
+        <form class="card-body" id="suppression-form">
+          <div class="field"><label for="sup-email">Email</label><input class="input" id="sup-email" name="email" type="email" placeholder="person@example.com" required /></div>
+          <div class="field mt-12"><label for="sup-reason">Reason</label><input class="input" id="sup-reason" name="reason" placeholder="Unsubscribed, competitor, do not contact..." /></div>
+          <button class="btn primary mt-16" type="submit">${icon("plus", 14)} Add to suppression</button>
+          <div class="notice mt-12">Suppression is permanent until removed here. A denied draft does not automatically suppress the address unless you tick the box in the deny dialog.</div>
+        </form>
+      </div>
+    </div>
+  `;
+  $("#suppression-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    try {
+      await api("/suppression", {
+        method: "POST",
+        body: JSON.stringify({ email: form.email.value, reason: form.reason.value }),
+      });
+      toast("Address added to suppression.");
+      renderPage();
+    } catch (error) {
+      toast(error.message, "error");
+    }
   });
 }
 
@@ -1702,7 +1842,7 @@ async function renderSheets(token) {
   $("#page").innerHTML = `
     <div class="page-head">
       <div><h1 class="page-title">Google Sheets</h1><div class="page-sub">${esc(PAGES.sheets.sub)}</div></div>
-      <div class="page-actions">${data.configured ? `<a class="btn" href="https://docs.google.com/spreadsheets/d/${encodeURIComponent(data.spreadsheet_id)}/edit" target="_blank" rel="noreferrer">${icon("globe", 14)} Open sheet</a>` : ""}<button class="btn" data-action="sheet-test" ${data.configured ? "" : 'disabled title="Save a connection first"'}>${icon("checkCircle", 14)} Test connection</button><button class="btn primary" data-action="sheet-sync" data-direction="both" ${data.configured ? "" : 'disabled title="Save a connection first"'}>${icon("refresh", 14)} Two-way sync</button></div>
+      <div class="page-actions"><button class="btn" data-action="refresh">${icon("refresh", 14)} Refresh</button>${data.configured ? `<a class="btn" href="https://docs.google.com/spreadsheets/d/${encodeURIComponent(data.spreadsheet_id)}/edit" target="_blank" rel="noreferrer">${icon("globe", 14)} Open sheet</a>` : ""}<button class="btn" data-action="sheet-test" ${data.configured ? "" : 'disabled title="Save a connection first"'}>${icon("checkCircle", 14)} Test connection</button><button class="btn primary" data-action="sheet-sync" data-direction="both" ${data.configured ? "" : 'disabled title="Save a connection first"'}>${icon("refresh", 14)} Two-way sync</button></div>
     </div>
     ${data.configured ? `<div class="notice green" style="margin-bottom:14px">Connected${data.service_account_email ? ` as <strong>${esc(data.service_account_email)}</strong>` : ""}. Last sync: ${data.last_sync_at ? esc(fmtDate(data.last_sync_at)) : "never"}.</div>` : `<div class="notice amber" style="margin-bottom:14px">Not configured. Add a spreadsheet ID and service account JSON below, share the sheet with the service account email, then test.</div>`}
     <div class="grid dashboard-grid">
@@ -2160,6 +2300,10 @@ document.addEventListener("click", async (event) => {
     navigate("leads");
     return;
   }
+  if (action === "campaign-settings") {
+    openCampaignSettings(id);
+    return;
+  }
   if (action === "toggle-campaign") {
     try {
       await toggleCampaign(id);
@@ -2175,6 +2319,17 @@ document.addEventListener("click", async (event) => {
   }
   if (action === "open-lead") {
     await openLeadModal(id);
+    return;
+  }
+  if (action === "suppression-remove") {
+    const email = target.dataset.email;
+    try {
+      await api(`/suppression/${encodeURIComponent(email)}`, { method: "DELETE" });
+      toast("Address removed from suppression.");
+      renderPage();
+    } catch (error) {
+      toast(error.message, "error");
+    }
     return;
   }
   if (action === "test-mailbox") {

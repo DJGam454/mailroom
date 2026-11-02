@@ -357,6 +357,13 @@ table.leads-table { table-layout: fixed; min-width: 0; }
 .leads-table th:nth-child(5) { width: 14%; }
 .leads-table th:nth-child(6) { width: 16%; }
 .leads-table td .chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+table.suppression-table { table-layout: fixed; min-width: 0; }
+.suppression-table th:nth-child(1) { width: 44%; }
+.suppression-table th:nth-child(2) { width: 30%; }
+.suppression-table th:nth-child(3) { width: 16%; }
+.suppression-table th:nth-child(4) { width: 10%; }
+.suppression-table td { overflow: hidden; text-overflow: ellipsis; }
+.suppression-table td .empty { padding: 34px 12px; }
 .leads-table td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .domain-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid #f1f2f5; }
 .domain-row:last-child { border-bottom: 0; }

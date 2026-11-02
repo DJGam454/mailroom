@@ -144,6 +144,11 @@ class WarmupSettingsUpdate(BaseModel):
     values: dict[str, str]
 
 
+class SuppressionCreate(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+    reason: str = ""
+
+
 class SheetsConfigure(BaseModel):
     spreadsheet_id: str = Field(min_length=10, max_length=200)
     credentials_json: str | None = None
