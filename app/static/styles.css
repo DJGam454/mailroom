@@ -420,6 +420,7 @@ table.suppression-table { table-layout: fixed; min-width: 0; }
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field label { font-size: 11.5px; font-weight: 650; color: #4c5361; }
 .field .hint { color: var(--muted-2); font-size: 10.5px; line-height: 1.45; }
+.input:disabled, .select:disabled, .textarea:disabled { background: var(--surface-2); color: var(--muted); cursor: not-allowed; }
 .input, .select, .textarea {
   width: 100%; border: 1px solid var(--line-strong); border-radius: 8px;
   background: #fff; color: var(--text); padding: 0 10px; height: 34px;

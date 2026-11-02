@@ -339,6 +339,21 @@ def test_campaign_and_leads_api(seeded):
         assert not any(key.endswith("_enc") for key in settings)
 
 
+def test_mailbox_edit_api(seeded):
+    with TestClient(app) as client:
+        mailbox = client.get("/api/mailboxes").json()["items"][0]
+        assert mailbox["campaign_ids"]
+        updated = client.patch(
+            f"/api/mailboxes/{mailbox['id']}",
+            json={"daily_limit": 7, "hourly_limit": 2, "timezone": "UTC", "campaign_ids": []},
+        )
+        assert updated.status_code == 200
+        assert updated.json()["item"]["daily_limit"] == 7
+        assert updated.json()["item"]["hourly_limit"] == 2
+        assert updated.json()["item"]["timezone"] == "UTC"
+        assert updated.json()["item"]["campaign_ids"] == []
+
+
 def test_domain_settings_patch(seeded):
     with TestClient(app) as client:
         domain = client.get("/api/domains").json()["items"][0]

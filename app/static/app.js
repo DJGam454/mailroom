@@ -160,6 +160,7 @@ const ACTIVITY_META = {
   draft_denied: ["Draft denied", "red"],
   draft_queued: ["Draft queued", "blue"],
   draft_edited: ["Draft edited", "amber"],
+  draft_agent_generated: ["Agent draft generated", "violet"],
   draft_regenerated: ["Draft regenerated", "gray"],
   leads_imported: ["Leads imported", "green"],
   drafts_generated: ["Drafts generated", "violet"],
@@ -241,6 +242,15 @@ function esc(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function safeHref(value) {
+  try {
+    const url = new URL(value, location.origin);
+    return ["http:", "https:"].includes(url.protocol) ? value : "";
+  } catch {
+    return "";
+  }
 }
 
 function icon(name, size = 18) {
@@ -1352,6 +1362,7 @@ async function openLeadModal(id) {
     const data = await api(`/leads/${id}`);
     const lead = data.lead;
     const draft = data.draft;
+    const website = safeHref(lead.website);
     state.leadDraft = draft
       ? {
           draft_id: draft.id,
@@ -1385,7 +1396,7 @@ async function openLeadModal(id) {
         ` : data.queue ? `
           <div class="notice mt-16">${statusChip(data.queue.status)} Scheduled for <strong>${esc(fmtDate(data.queue.scheduled_at))}</strong> via ${esc(data.queue.mailbox_email || "a reserved mailbox")}.</div>
         ` : ""}
-        ${lead.website ? `<div class="mt-12 small muted">${icon("globe", 13)} <a href="${esc(lead.website)}" target="_blank" rel="noreferrer">${esc(lead.website)}</a></div>` : ""}
+        ${website ? `<div class="mt-12 small muted">${icon("globe", 13)} <a href="${esc(website)}" target="_blank" rel="noreferrer">${esc(website)}</a></div>` : ""}
       `,
       footer: draft && draft.status === "pending"
         ? `<button class="btn" data-action="close-modal">Close</button><button class="btn danger" data-action="deny" data-id="${draft.id}">Deny</button><button class="btn" data-action="edit-draft" data-id="${draft.id}">${icon("edit", 14)} Edit</button><button class="btn success" data-action="approve" data-id="${draft.id}">Approve & queue</button>`
@@ -1519,7 +1530,7 @@ async function renderInboxes(token) {
               <td><div class="usage-inline">${progress(mailbox.sent_today, mailbox.daily_limit, "green")}<span>${fmtNumber(mailbox.sent_today)}/${fmtNumber(mailbox.daily_limit)}</span></div><div class="sub">${fmtNumber(mailbox.warmup_sent_today)} warmup · ${fmtNumber(mailbox.combined_sent_today)} total</div></td>
               <td class="cell-muted">${fmtNumber(mailbox.sent_hour)}/${fmtNumber(mailbox.hourly_limit)}</td>
               <td>${mailbox.status === "active" ? '<span class="chip green">Active</span>' : '<span class="chip amber">Paused</span>'}</td>
-              <td class="cell-actions"><button class="btn xs" data-action="test-mailbox" data-id="${mailbox.id}">Test</button><button class="btn xs ghost" data-action="${mailbox.status === "active" ? "pause-mailbox" : "resume-mailbox"}" data-id="${mailbox.id}">${mailbox.status === "active" ? "Pause" : "Resume"}</button></td>
+              <td class="cell-actions"><button class="btn xs" data-action="test-mailbox" data-id="${mailbox.id}">Test</button><button class="btn xs ghost" data-action="${mailbox.status === "active" ? "pause-mailbox" : "resume-mailbox"}" data-id="${mailbox.id}">${mailbox.status === "active" ? "Pause" : "Resume"}</button><button class="icon-btn bordered" data-action="edit-mailbox" data-id="${mailbox.id}" title="Edit mailbox" aria-label="Edit mailbox">${icon("settings", 13)}</button></td>
             </tr>
           `).join("")}</tbody>
         </table>
@@ -1587,72 +1598,114 @@ function openDomainSettings(id) {
   });
 }
 
-function openMailboxModal(domainId = null) {
+function openMailboxModal(domainId = null, mailbox = null) {
   if (!state.domains.length) {
     toast("Add a domain first.", "error");
     return;
   }
+  const editing = Boolean(mailbox);
+  const selectedDomain = String(mailbox?.domain_id || domainId || state.domains[0].id);
+  const transport = mailbox?.transport || "mock";
+  const checkedCampaigns = new Set(
+    (editing ? mailbox.campaign_ids || [] : state.campaigns.map((campaign) => campaign.id)).map(Number),
+  );
+  const timezone = mailbox?.timezone || state.settings.default_timezone || "Asia/Kolkata";
   openModal({
-    title: "Add mailbox",
-    sub: "Mock is safe. SMTP and Apps Script are real transports.",
+    title: editing ? "Edit mailbox" : "Add mailbox",
+    sub: editing ? `${mailbox.email} · leave a password blank to keep the saved one` : "Mock is safe. SMTP and Apps Script are real transports.",
     wide: true,
     body: `
       <form id="modal-form">
         <div class="form-grid">
-          <div class="field"><label for="mb-domain">Domain</label><select class="select" id="mb-domain" name="domain_id">${state.domains.map((domain) => `<option value="${domain.id}" ${String(domainId || state.domains[0].id) === String(domain.id) ? "selected" : ""}>${esc(domain.name)}</option>`).join("")}</select></div>
-          <div class="field"><label for="mb-email">Mailbox email</label><input class="input" id="mb-email" name="email" type="email" placeholder="alex@outreach.example.com" required /></div>
-          <div class="field"><label for="mb-name">Display name</label><input class="input" id="mb-name" name="display_name" placeholder="Alex Morgan" /></div>
-          <div class="field"><label for="mb-transport">Transport</label><select class="select" id="mb-transport" name="transport"><option value="mock">Mock - safe local outbox</option><option value="smtp">SMTP - real mail</option><option value="gas">Google Apps Script webhook</option></select></div>
+          <div class="field"><label for="mb-domain">Domain</label>${editing ? `<input class="input" id="mb-domain" value="${esc(mailbox.domain_name || "")}" disabled />` : `<select class="select" id="mb-domain" name="domain_id">${state.domains.map((domain) => `<option value="${domain.id}" ${selectedDomain === String(domain.id) ? "selected" : ""}>${esc(domain.name)}</option>`).join("")}</select>`}</div>
+          <div class="field"><label for="mb-email">Mailbox email</label><input class="input" id="mb-email" name="email" type="email" value="${esc(mailbox?.email || "")}" ${editing ? "disabled" : ""} placeholder="alex@outreach.example.com" required /></div>
+          <div class="field"><label for="mb-name">Display name</label><input class="input" id="mb-name" name="display_name" value="${esc(mailbox?.display_name || "")}" placeholder="Alex Morgan" /></div>
+          <div class="field"><label for="mb-transport">Transport</label><select class="select" id="mb-transport" name="transport">${[["mock", "Mock - safe local outbox"], ["smtp", "SMTP - real mail"], ["gas", "Google Apps Script webhook"]].map(([value, label]) => `<option value="${value}" ${transport === value ? "selected" : ""}>${label}</option>`).join("")}</select></div>
         </div>
-        <div class="form-section">
+        <div class="form-section" data-for-transports="smtp">
           <div class="form-section-title">SMTP</div>
           <div class="form-grid">
-            <div class="field"><label for="mb-host">Host</label><input class="input" id="mb-host" name="smtp_host" placeholder="smtp.example.com" /></div>
-            <div class="field"><label for="mb-port">Port</label><input class="input" id="mb-port" name="smtp_port" type="number" value="587" /></div>
-            <div class="field"><label for="mb-user">Username</label><input class="input" id="mb-user" name="smtp_username" /></div>
-            <div class="field"><label for="mb-pass">Password</label><input class="input" id="mb-pass" name="smtp_password" type="password" placeholder="Stored encrypted on this Mac" /></div>
+            <div class="field"><label for="mb-host">Host</label><input class="input" id="mb-host" name="smtp_host" value="${esc(mailbox?.smtp_host || "")}" placeholder="smtp.example.com" /></div>
+            <div class="field"><label for="mb-port">Port</label><input class="input" id="mb-port" name="smtp_port" type="number" value="${esc(mailbox?.smtp_port || 587)}" /></div>
+            <div class="field"><label for="mb-user">Username</label><input class="input" id="mb-user" name="smtp_username" value="${esc(mailbox?.smtp_username || "")}" /></div>
+            <div class="field"><label for="mb-pass">Password</label><input class="input" id="mb-pass" name="smtp_password" type="password" placeholder="${editing && mailbox.has_smtp_password ? "Saved. Leave blank to keep." : "Stored encrypted on this Mac"}" /></div>
           </div>
         </div>
-        <div class="form-section">
+        <div class="form-section" data-for-transports="gas">
           <div class="form-section-title">Google Apps Script</div>
           <div class="form-grid">
-            <div class="field"><label for="mb-gas">Webhook URL</label><input class="input" id="mb-gas" name="gas_url" placeholder="https://script.google.com/..." /></div>
-            <div class="field"><label for="mb-secret">Shared secret</label><input class="input" id="mb-secret" name="gas_secret" type="password" /></div>
+            <div class="field"><label for="mb-gas">Webhook URL</label><input class="input" id="mb-gas" name="gas_url" value="${esc(mailbox?.gas_url || "")}" placeholder="https://script.google.com/..." /></div>
+            <div class="field"><label for="mb-secret">Shared secret</label><input class="input" id="mb-secret" name="gas_secret" type="password" placeholder="${editing && mailbox.has_gas_secret ? "Saved. Leave blank to keep." : ""}" /></div>
+          </div>
+        </div>
+        <div class="form-section" data-for-transports="smtp,gas">
+          <div class="form-section-title">IMAP (optional, for warmup read flags)</div>
+          <div class="form-grid">
+            <div class="field"><label for="mb-imap-host">Host</label><input class="input" id="mb-imap-host" name="imap_host" value="${esc(mailbox?.imap_host || "")}" placeholder="imap.example.com" /></div>
+            <div class="field"><label for="mb-imap-port">Port</label><input class="input" id="mb-imap-port" name="imap_port" type="number" value="${esc(mailbox?.imap_port || 993)}" /></div>
+            <div class="field"><label for="mb-imap-user">Username</label><input class="input" id="mb-imap-user" name="imap_username" value="${esc(mailbox?.imap_username || "")}" /></div>
+            <div class="field"><label for="mb-imap-pass">Password</label><input class="input" id="mb-imap-pass" name="imap_password" type="password" placeholder="${editing && mailbox.has_imap_password ? "Saved. Leave blank to keep." : "Stored encrypted on this Mac"}" /></div>
           </div>
         </div>
         <div class="form-section">
-          <div class="form-section-title">Caps</div>
+          <div class="form-section-title">Caps and schedule</div>
           <div class="form-grid">
-            <div class="field"><label for="mb-daily">Daily limit</label><input class="input" id="mb-daily" name="daily_limit" type="number" value="25" /></div>
-            <div class="field"><label for="mb-hourly">Hourly limit</label><input class="input" id="mb-hourly" name="hourly_limit" type="number" value="5" /></div>
-            <div class="field"><label for="mb-min">Min gap (seconds)</label><input class="input" id="mb-min" name="min_gap_seconds" type="number" value="45" /></div>
-            <div class="field"><label for="mb-max">Max gap (seconds)</label><input class="input" id="mb-max" name="max_gap_seconds" type="number" value="240" /></div>
+            <div class="field"><label for="mb-daily">Daily limit</label><input class="input" id="mb-daily" name="daily_limit" type="number" value="${esc(mailbox?.daily_limit || 25)}" /></div>
+            <div class="field"><label for="mb-hourly">Hourly limit</label><input class="input" id="mb-hourly" name="hourly_limit" type="number" value="${esc(mailbox?.hourly_limit || 5)}" /></div>
+            <div class="field"><label for="mb-min">Min gap (seconds)</label><input class="input" id="mb-min" name="min_gap_seconds" type="number" value="${esc(mailbox?.min_gap_seconds || 45)}" /></div>
+            <div class="field"><label for="mb-max">Max gap (seconds)</label><input class="input" id="mb-max" name="max_gap_seconds" type="number" value="${esc(mailbox?.max_gap_seconds || 240)}" /></div>
+            <div class="field full"><label for="mb-timezone">Timezone</label><input class="input" id="mb-timezone" name="timezone" value="${esc(timezone)}" /></div>
           </div>
         </div>
-        <div class="field mt-12"><label>Assign to campaigns</label><div class="row wrap" style="gap:12px">${state.campaigns.map((campaign) => `<label class="checkline"><input type="checkbox" name="campaign_ids" value="${campaign.id}" checked /> ${esc(campaign.name)}</label>`).join("")}</div></div>
+        <div class="field mt-12"><label>Assign to campaigns</label><div class="row wrap" style="gap:12px">${state.campaigns.map((campaign) => `<label class="checkline"><input type="checkbox" name="campaign_ids" value="${campaign.id}" ${checkedCampaigns.has(Number(campaign.id)) ? "checked" : ""} /> ${esc(campaign.name)}</label>`).join("")}</div></div>
       </form>
     `,
-    footer: `<button class="btn" data-action="close-modal">Cancel</button><button class="btn primary" type="submit" form="modal-form">Add mailbox</button>`,
+    footer: `<button class="btn" data-action="close-modal">Cancel</button><button class="btn primary" type="submit" form="modal-form">${editing ? "Save mailbox" : "Add mailbox"}</button>`,
+    onReady: (root) => {
+      const select = $("#mb-transport", root);
+      const update = () => {
+        $$("[data-for-transports]", root).forEach((section) => {
+          const allowed = section.dataset.forTransports.split(",");
+          section.classList.toggle("hidden", !allowed.includes(select.value));
+        });
+      };
+      select.addEventListener("change", update);
+      update();
+    },
     onSubmit: async (formData) => {
+      const selectedTransport = formData.get("transport");
       const payload = {
-        domain_id: Number(formData.get("domain_id")),
-        email: formData.get("email"),
         display_name: formData.get("display_name") || "",
-        transport: formData.get("transport"),
-        smtp_host: formData.get("smtp_host") || null,
-        smtp_port: formData.get("smtp_port") ? Number(formData.get("smtp_port")) : null,
-        smtp_username: formData.get("smtp_username") || null,
-        smtp_password: formData.get("smtp_password") || null,
-        gas_url: formData.get("gas_url") || null,
-        gas_secret: formData.get("gas_secret") || null,
+        transport: selectedTransport,
+        smtp_host: selectedTransport === "smtp" ? formData.get("smtp_host") || null : null,
+        smtp_port: selectedTransport === "smtp" && formData.get("smtp_port") ? Number(formData.get("smtp_port")) : null,
+        smtp_username: selectedTransport === "smtp" ? formData.get("smtp_username") || null : null,
+        smtp_password: selectedTransport === "smtp" ? formData.get("smtp_password") || null : null,
+        imap_host: selectedTransport !== "mock" ? formData.get("imap_host") || null : null,
+        imap_port: selectedTransport !== "mock" && formData.get("imap_port") ? Number(formData.get("imap_port")) : null,
+        imap_username: selectedTransport !== "mock" ? formData.get("imap_username") || null : null,
+        imap_password: selectedTransport !== "mock" ? formData.get("imap_password") || null : null,
+        gas_url: selectedTransport === "gas" ? formData.get("gas_url") || null : null,
+        gas_secret: selectedTransport === "gas" ? formData.get("gas_secret") || null : null,
         daily_limit: Number(formData.get("daily_limit")),
         hourly_limit: Number(formData.get("hourly_limit")),
         min_gap_seconds: Number(formData.get("min_gap_seconds")),
         max_gap_seconds: Number(formData.get("max_gap_seconds")),
+        timezone: formData.get("timezone") || "Asia/Kolkata",
         campaign_ids: formData.getAll("campaign_ids").map(Number),
       };
-      await api("/mailboxes", { method: "POST", body: JSON.stringify(payload) });
-      toast("Mailbox added. Use Test to check the connection.");
+      if (editing) {
+        for (const key of ["smtp_password", "imap_password", "gas_secret"]) {
+          if (!payload[key]) delete payload[key];
+        }
+        await api(`/mailboxes/${mailbox.id}`, { method: "PATCH", body: JSON.stringify(payload) });
+        toast("Mailbox updated. Run Test if the connection changed.");
+      } else {
+        payload.domain_id = Number(formData.get("domain_id"));
+        payload.email = formData.get("email");
+        await api("/mailboxes", { method: "POST", body: JSON.stringify(payload) });
+        toast("Mailbox added. Use Test to check the connection.");
+      }
       renderPage();
     },
   });
@@ -2311,7 +2364,7 @@ function closeModal() {
   if (root) root.innerHTML = "";
 }
 
-function openModal({ title, sub = "", body = "", footer = "", wide = false, narrow = false, onSubmit = null }) {
+function openModal({ title, sub = "", body = "", footer = "", wide = false, narrow = false, onSubmit = null, onReady = null }) {
   closeModal();
   const root = $("#modal-root");
   root.innerHTML = `
@@ -2340,6 +2393,7 @@ function openModal({ title, sub = "", body = "", footer = "", wide = false, narr
       }
     });
   }
+  if (onReady) onReady(root);
 }
 
 function openConfirm(title, message, onConfirm, confirmLabel = "Confirm", danger = false) {
@@ -2501,6 +2555,11 @@ document.addEventListener("click", async (event) => {
       "Remove",
       true,
     );
+    return;
+  }
+  if (action === "edit-mailbox") {
+    const mailbox = state.inboxes.find((item) => Number(item.id) === Number(id));
+    if (mailbox) openMailboxModal(mailbox.domain_id, mailbox);
     return;
   }
   if (action === "test-mailbox") {

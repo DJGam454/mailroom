@@ -18,7 +18,7 @@ WORKER_ENABLED = os.getenv("MAILROOM_WORKER", "1").lower() not in {"0", "false",
 WORKER_INTERVAL = float(os.getenv("MAILROOM_WORKER_INTERVAL", "2"))
 WARMUP_WORKER_ENABLED = os.getenv("MAILROOM_WARMUP_WORKER", "1").lower() not in {"0", "false", "no"}
 WARMUP_WORKER_INTERVAL = float(os.getenv("MAILROOM_WARMUP_INTERVAL", "5"))
-APP_VERSION = "0.5.1"
+APP_VERSION = "0.5.3"
 
 
 def ensure_data_dirs() -> None:

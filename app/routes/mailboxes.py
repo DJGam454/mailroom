@@ -33,7 +33,11 @@ def _mailbox_rows(conn) -> list[dict[str, Any]]:
                (SELECT group_concat(c.name, ', ')
                   FROM campaign_mailboxes cm
                   JOIN campaigns c ON c.id = cm.campaign_id
-                 WHERE cm.mailbox_id = m.id AND cm.enabled = 1) AS campaigns
+                 WHERE cm.mailbox_id = m.id AND cm.enabled = 1) AS campaigns,
+               (SELECT group_concat(c.id)
+                  FROM campaign_mailboxes cm
+                  JOIN campaigns c ON c.id = cm.campaign_id
+                 WHERE cm.mailbox_id = m.id AND cm.enabled = 1) AS campaign_ids_csv
         FROM mailboxes m
         JOIN domains d ON d.id = m.domain_id
         LEFT JOIN mailbox_usage_daily u ON u.mailbox_id = m.id AND u.date = date('now')
@@ -43,6 +47,8 @@ def _mailbox_rows(conn) -> list[dict[str, Any]]:
     items = []
     for row in rows:
         item = mailbox_public(row)
+        raw_ids = str(item.pop("campaign_ids_csv", "") or "")
+        item["campaign_ids"] = [int(value) for value in raw_ids.split(",") if value.strip().isdigit()]
         item["combined_sent_today"] = int(item.get("sent_today") or 0) + int(item.get("warmup_sent_today") or 0)
         items.append(item)
     return items
