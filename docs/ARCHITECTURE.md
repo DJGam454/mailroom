@@ -253,6 +253,7 @@ GET    /api/leads
 GET    /api/leads/{id}
 GET    /api/leads/export.csv
 POST   /api/leads/import
+POST   /api/drafts/{id}/regenerate
 
 GET    /api/approvals
 POST   /api/approvals/{draft_id}/approve
@@ -264,9 +265,12 @@ GET    /api/mailboxes
 POST   /api/mailboxes
 PATCH  /api/mailboxes/{id}
 POST   /api/mailboxes/{id}/test
+POST   /api/mailboxes/{id}/pause
+POST   /api/mailboxes/{id}/resume
 
 GET    /api/domains
 POST   /api/domains
+PATCH  /api/domains/{id}
 POST   /api/domains/{id}/check
 
 GET    /api/deliverability
