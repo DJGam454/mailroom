@@ -22,6 +22,21 @@ def test_seed_has_a_full_rotation_pool(seeded):
     assert picked["email"].endswith("@atlas-outreach.test") or "@" in picked["email"]
 
 
+def test_slot_respects_campaign_and_mailbox_gaps(seeded):
+    campaign = dict(db.one(seeded, "SELECT * FROM campaigns ORDER BY id LIMIT 1"))
+    mailbox = dict(db.one(seeded, "SELECT * FROM mailboxes ORDER BY id LIMIT 1"))
+    campaign["min_gap_seconds"] = 90
+    campaign["max_gap_seconds"] = 360
+    mailbox["min_gap_seconds"] = 200
+    mailbox["max_gap_seconds"] = 250
+    mailbox["next_available_at"] = None
+    with db.transaction() as conn:
+        scheduled = rotation.reserve_slot(conn, campaign, mailbox)
+    updated = db.one(seeded, "SELECT next_available_at FROM mailboxes WHERE id = ?", (mailbox["id"],))
+    delta = rotation.parse_dt(updated["next_available_at"]) - rotation.parse_dt(scheduled)
+    assert 200 <= delta.total_seconds() <= 250
+
+
 def test_approval_reserves_a_mailbox_and_queue_slot(seeded):
     draft = first_pending(seeded)
     with db.transaction() as conn:
