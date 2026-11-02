@@ -115,16 +115,21 @@ Reservation:
 
 ```text
 scheduled_at = max(now, mailbox.next_available_at, next_window_start)
-mailbox.next_available_at = scheduled_at + random(min_gap, max_gap)
+mailbox.next_available_at = scheduled_at + random(effective_min, effective_max)
 ```
 
-If no mailbox is eligible, the queue item stays queued with a reason and the
-UI shows it in the "blocked" state. The operator can pause, add a mailbox, or
-raise a cap.
+The effective minimum is the higher of the campaign and mailbox minimums. The
+effective maximum is the lower of their maximums, never below the effective
+minimum.
+
+If no mailbox is eligible, approval returns an error and the draft stays
+pending. The operator can pause, add a mailbox or raise a cap, then approve
+again.
 
 Send-time checks repeat eligibility. If a mailbox was paused or a cap was hit
-after approval, the item is reassigned or rescheduled. This prevents stale
-assignments from sending.
+after approval, the item is retried and rescheduled. It is not reassigned to a
+different mailbox automatically; cancel and re-approve to pick another one.
+This prevents stale assignments from sending.
 
 ## 5. Worker
 

@@ -128,6 +128,10 @@ scheduled_at = max(now, mailbox.next_available_at, next window start)
 mailbox.next_available_at = scheduled_at + random gap
 ```
 
+The effective gap uses the higher of the campaign and mailbox minimums and the
+lower of their maximums. That lets a mailbox enforce a conservative floor even
+when a campaign is configured more loosely.
+
 At send time it re-checks campaign status, mailbox status, domain status,
 suppression, repeat contact, the window, daily limits and hourly limits. A
 paused mailbox cannot send a stale approval.
