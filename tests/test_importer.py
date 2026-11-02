@@ -107,6 +107,20 @@ def test_map_csv_lead_accepts_mailroom_export_headers():
     assert record["notes"] == "A strong local team."
 
 
+def test_email_is_normalized_and_invalid_rows_are_skipped(conn, tmp_path):
+    record = importer.map_csv_lead({"Email": " ADA @ Example.TEST "})
+    assert record["email"] == "ada@example.test"
+    source = tmp_path / "bad.csv"
+    source.write_text(
+        "Email,Company\nnot-an-email,Bad Co\nvalid@example.test,Good Co\n",
+        encoding="utf-8",
+    )
+    with db.transaction() as tx:
+        result = importer.import_csv(tx, source, "Validation campaign")
+    assert result["imported"] == 1
+    assert result["skipped"] == 1
+
+
 def test_map_csv_lead_accepts_icp_sheet_headers():
     record = importer.map_csv_lead(
         {

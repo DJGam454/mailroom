@@ -15,6 +15,13 @@ from typing import Any
 from app import db
 from app.services import drafting
 
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def _clean_email(value: Any) -> str:
+    return re.sub(r"\s+", "", str(value or "")).lower()
+
+
 DEFAULT_SUBJECT = "Quick idea for {{company}}"
 DEFAULT_BODY = (
     "Hi {{first_name}},\n\n"
@@ -74,7 +81,7 @@ def _trim(value: Any, limit: int = 260) -> str:
 
 
 def map_json_lead(item: dict[str, Any]) -> dict[str, Any]:
-    email = (item.get("email") or "").strip().lower()
+    email = _clean_email(item.get("email"))
     name = (item.get("contact_name") or item.get("business_name") or "").strip()
     company = (item.get("business_name") or item.get("company") or "").strip()
     observation = item.get("business_strength") or item.get("observation") or ""
@@ -118,7 +125,7 @@ def map_csv_lead(row: dict[str, str]) -> dict[str, Any]:
                 return str(value).strip()
         return ""
 
-    email = pick("Email").lower()
+    email = _clean_email(pick("Email"))
     company = pick("Doctor Name", "Business Name", "Company")
     contact = pick("Contact Name", "Name")
     role = pick("Role", "Contact Title")
@@ -154,7 +161,7 @@ def _insert_leads(conn, campaign_id: int, records: list[dict[str, Any]]) -> tupl
     skipped = 0
     now = db.now_iso()
     for record in records:
-        if not record["email"] or "@" not in record["email"]:
+        if not EMAIL_RE.match(record["email"]):
             skipped += 1
             continue
         cursor = conn.execute(
