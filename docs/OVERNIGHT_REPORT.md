@@ -1,6 +1,6 @@
 # Overnight build report
 
-Date: 2026-11-02
+Date: 2026-11-03
 
 ## What is ready
 
@@ -39,6 +39,8 @@ The app has:
 - Global pause switch, repeat-send protection across campaigns, and no auto
   approval path.
 - Combined campaign plus warmup volume on the inbox and deliverability pages.
+- Daily counters reset on the operator's local date; 00:00-23:59 is a true
+  all-day window.
 - Activity log and CSV/JSON import.
 - 55 passing tests and a GitHub Actions workflow.
 
@@ -64,6 +66,8 @@ public repo contains synthetic demo leads only.
     duplicate address is blocked at approval and at send time.
 12. Ran a 25-mailbox warmup simulation: 50 cross-domain threads, 50 opens, 50
     replies, 100 mock files, no same-domain pairs and no failed tasks.
+13. Verified the 23:59 all-day boundary and local-date counters with a fresh
+    approval, mock send and queue read after local midnight.
 
 ## How to use it in the morning
 
