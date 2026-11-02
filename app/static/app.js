@@ -174,9 +174,27 @@ const ACTIVITY_META = {
   domain_updated: ["Domain updated", "gray"],
   dns_checked: ["DNS checked", "blue"],
   queue_cancelled: ["Queue cancelled", "amber"],
+  queue_send_now: ["Send now requested", "blue"],
   send_retry: ["Send retry", "amber"],
   send_failed: ["Send failed", "red"],
   settings_updated: ["Settings updated", "gray"],
+  suppression_added: ["Suppression added", "red"],
+  suppression_removed: ["Suppression removed", "amber"],
+  google_sheets_configured: ["Google Sheets configured", "violet"],
+  warmup_thread_created: ["Warmup thread created", "violet"],
+  warmup_message_sent: ["Warmup message sent", "violet"],
+  warmup_opened: ["Warmup opened", "blue"],
+  warmup_replied: ["Warmup replied", "green"],
+  warmup_task_retry: ["Warmup retry", "amber"],
+  warmup_task_failed: ["Warmup failed", "red"],
+  warmup_started: ["Warmup started", "violet"],
+  warmup_paused: ["Warmup paused", "amber"],
+  warmup_resumed: ["Warmup resumed", "green"],
+  warmup_stopped: ["Warmup stopped", "gray"],
+  warmup_off: ["Warmup off", "gray"],
+  warmup_ramping: ["Warmup ramping", "violet"],
+  warmup_active: ["Warmup active", "green"],
+  warmup_settings_updated: ["Warmup settings updated", "gray"],
   demo_seeded: ["Demo seeded", "violet"],
 };
 
@@ -386,6 +404,7 @@ function activityMeta(kind) {
 function activityDetail(item) {
   try {
     const data = JSON.parse(item.detail || "{}");
+    if (data.from && data.to) return `${data.from} → ${data.to}`;
     return (
       data.email ||
       data.mailbox ||
@@ -442,6 +461,7 @@ function renderShell() {
         <div class="campaign-select-wrap">
           <label for="campaign-select">Campaign view</label>
           <select id="campaign-select" class="select">${campaignOptions(campaignSelectValue())}</select>
+          <div class="campaign-hint">Filters approvals, leads and the queue.</div>
         </div>
         <div class="sidebar-scroll">
           ${NAV_GROUPS.map(
@@ -607,7 +627,7 @@ async function renderOverview(token) {
     <div class="page-head">
       <div>
         <h1 class="page-title">Overview</h1>
-        <div class="page-sub">${esc(PAGES.overview.sub)} ${state.campaignId ? `Viewing <strong>${esc(campaignName(state.campaignId))}</strong>.` : ""}</div>
+        <div class="page-sub">${esc(PAGES.overview.sub)}</div>
       </div>
       <div class="page-actions">
         <button class="btn" data-action="refresh">${icon("refresh", 15)} Refresh</button>
@@ -2033,7 +2053,11 @@ function renderSheetResult(result) {
 /* ----------------------------- queue ----------------------------- */
 
 async function renderQueue(token) {
-  const [data, sentData] = await Promise.all([api("/queue"), api("/queue?status=sent&limit=12")]);
+  const base = state.campaignId ? `campaign_id=${encodeURIComponent(state.campaignId)}&` : "";
+  const [data, sentData] = await Promise.all([
+    api(`/queue?${base}`),
+    api(`/queue?${base}status=sent&limit=12`),
+  ]);
   if (token !== state.renderToken) return;
   state.queue = data;
   const items = data.items || [];
@@ -2041,7 +2065,7 @@ async function renderQueue(token) {
   const counts = data.counts || {};
   $("#page").innerHTML = `
     <div class="page-head">
-      <div><h1 class="page-title">Send queue</h1><div class="page-sub">${esc(PAGES.queue.sub)}</div></div>
+      <div><h1 class="page-title">Send queue</h1><div class="page-sub">${esc(PAGES.queue.sub)} ${state.campaignId ? `Viewing <strong>${esc(campaignName(state.campaignId))}</strong>.` : ""}</div></div>
       <div class="page-actions"><button class="btn" data-action="queue-tick">${icon("play", 14)} Run worker</button><button class="btn" data-action="refresh">${icon("refresh", 15)} Refresh</button></div>
     </div>
     <div class="grid stat-grid">
@@ -2059,7 +2083,7 @@ async function renderQueue(token) {
     <div class="card mt-16">
       <div class="card-head"><div><div class="card-title">Recently sent</div><div class="card-sub">The last ${fmtNumber(recent.length)} accepted sends. Click a row to open the lead.</div></div><div class="right"><span class="chip green">${fmtNumber(counts.sent)} total</span></div></div>
       ${recent.length ? `<div class="table-wrap"><table class="table recent-table"><thead><tr><th>Sent</th><th>Person</th><th>Campaign</th><th>Mailbox</th><th>Subject</th><th>Status</th></tr></thead><tbody>${recent.map((item) => `
-        <tr class="clickable" data-action="open-lead" data-id="${item.lead_id}"><td class="cell-nowrap">${esc(fmtDate(item.scheduled_at))}<div class="sub">${esc(fmtRelative(item.scheduled_at))}</div></td><td><div class="cell-person"><div class="avatar sm ${avatarTone(item.name)}">${esc(initials(item.name))}</div><div><div class="name">${esc(item.name)}</div><div class="sub">${esc(item.company || "")} · ${esc(item.email)}</div></div></div></td><td class="cell-muted">${esc(item.campaign_name)}</td><td class="cell-muted mono" style="font-size:10.5px">${esc(item.mailbox_email)}</td><td class="cell-muted truncate" style="max-width:280px" title="${esc(item.subject)}">${esc(item.subject)}</td><td>${statusChip(item.status)}</td></tr>
+        <tr class="clickable" data-action="open-lead" data-id="${item.lead_id}"><td class="cell-nowrap">${esc(fmtDate(item.updated_at))}<div class="sub">${esc(fmtRelative(item.updated_at))}</div></td><td><div class="cell-person"><div class="avatar sm ${avatarTone(item.name)}">${esc(initials(item.name))}</div><div><div class="name">${esc(item.name)}</div><div class="sub">${esc(item.company || "")} · ${esc(item.email)}</div></div></div></td><td class="cell-muted">${esc(item.campaign_name)}</td><td class="cell-muted mono" style="font-size:10.5px">${esc(item.mailbox_email)}</td><td class="cell-muted truncate" style="max-width:280px" title="${esc(item.subject)}">${esc(item.subject)}</td><td>${statusChip(item.status)}</td></tr>
       `).join("")}</tbody></table></div>` : emptyState("No sends yet", "Approved drafts appear here after the worker sends them.", "send")}
     </div>
   `;
