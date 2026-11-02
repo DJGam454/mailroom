@@ -49,7 +49,7 @@ def _mailbox_rows(conn) -> list[dict[str, Any]]:
     for row in rows:
         item = mailbox_public(row)
         raw_ids = str(item.pop("campaign_ids_csv", "") or "")
-        item["campaign_ids"] = [int(value) for value in raw_ids.split(",") if value.strip().isdigit()]
+        item["campaign_ids"] = sorted(int(value) for value in raw_ids.split(",") if value.strip().isdigit())
         item["combined_sent_today"] = int(item.get("sent_today") or 0) + int(item.get("warmup_sent_today") or 0)
         items.append(item)
     return items

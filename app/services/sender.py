@@ -285,7 +285,7 @@ def send_queue_item(conn, queue_id: int) -> dict[str, Any]:
             mailbox["id"],
             mailbox["email"],
             lead["email"],
-            draft["subject"],
+            str(message["Subject"]),
             draft["body"],
             message_id,
             transport,
