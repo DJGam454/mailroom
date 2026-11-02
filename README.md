@@ -246,7 +246,7 @@ Full details: [docs/GOOGLE_SHEETS.md](docs/GOOGLE_SHEETS.md).
 | Campaigns | separate lead pools, limits and editable campaign settings |
 | Leads | the single sheet: search, filter, import, export |
 | Suppression | permanent stop addresses, add and remove |
-| Inboxes & domains | connections, caps and DNS checks |
+| Inboxes & domains | connections, editable mailbox caps and credentials, DNS checks |
 | Deliverability | volume and DNS state |
 | Warmup | closed-pool ramp, pairs, health and engagement |
 | Send queue | scheduled sends, recently sent, mailbox, retry state |
@@ -288,7 +288,7 @@ app/
 scripts/
   import_icp.py        import a real ICPExtractor pack locally
   sync_sheets.py       command-line Sheets sync
-tests/                 50 backend tests
+tests/                 51 backend tests
 integrations/
   apps_script/         optional Gmail bridge
 docs/
@@ -306,7 +306,7 @@ docs/
 make check
 ```
 
-This compiles the Python, checks the JavaScript syntax and runs the 50-test
+This compiles the Python, checks the JavaScript syntax and runs the 51-test
 pytest suite. GitHub Actions runs the same checks on every push and pull
 request.
 

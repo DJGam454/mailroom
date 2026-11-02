@@ -156,6 +156,8 @@ approvals and stops campaign sends. Warmup has its own pause controls.
    - `gas` for a Google Apps Script webhook.
 6. Click **Test** to verify the connection without sending a real email.
 7. Assign the mailbox to the campaign and keep caps low.
+8. Use the gear on a mailbox row to edit its caps, timezone, campaigns or
+   SMTP/IMAP credentials later. Leave a password blank to keep the saved one.
 
 Credentials are encrypted with Fernet. The key is created at
 `data/secret.key` with mode 0600 on first use. Set `MAILROOM_SECRET_KEY` to use
