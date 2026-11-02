@@ -266,7 +266,7 @@ Full details: [docs/GOOGLE_SHEETS.md](docs/GOOGLE_SHEETS.md).
 - The app binds to `127.0.0.1` by default.
 - Mock mode is the default.
 - Real sending requires a deliberate transport change per mailbox.
-- SMTP and Apps Script credentials are encrypted with Fernet.
+- SMTP, IMAP and Apps Script credentials are encrypted with Fernet.
 - The key is created at `data/secret.key` with mode 0600.
 - Authenticated SMTP requires TLS; Apps Script requires HTTPS.
 - Message headers are stripped of CR/LF, and encrypted settings are never
