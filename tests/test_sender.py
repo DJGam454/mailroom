@@ -47,8 +47,7 @@ def test_campaign_daily_limit_blocks_a_burst(seeded):
         """
         SELECT c.* FROM campaigns c
         WHERE (SELECT COUNT(*) FROM drafts d WHERE d.campaign_id = c.id AND d.status = 'pending') >= 2
-          AND (SELECT COUNT(*) FROM messages m WHERE m.campaign_id = c.id AND m.status = 'sent'
-               AND date(m.sent_at, 'localtime') = date('now', 'localtime')) = 0
+          AND (SELECT COUNT(*) FROM messages m WHERE m.campaign_id = c.id AND m.status = 'sent') = 0
         ORDER BY c.id LIMIT 1
         """,
     )
