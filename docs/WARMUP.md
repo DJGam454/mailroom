@@ -68,7 +68,9 @@ At each warmup tick:
 3. Select active profiles that are inside their window.
 4. Compute the day and ramp target.
 5. Count sent volume and already-created threads for today.
-6. Skip if the mailbox or domain cap is reached.
+6. Skip if the mailbox or domain cap is reached. The domain cap counts
+   threads created today, not only messages already sent, so a burst cannot
+   overshoot the cap before the sends happen.
 7. Choose a target:
    - different mailbox,
    - different domain,
