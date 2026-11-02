@@ -217,6 +217,10 @@ def test_agent_redraft(seeded, monkeypatch):
         assert missing.status_code == 400
         assert "webhook" in missing.json()["detail"].lower()
 
+        unsafe = client.patch("/api/settings", json={"values": {"agent_webhook": "file:///etc/passwd"}})
+        assert unsafe.status_code == 400
+        assert "http" in unsafe.json()["detail"].lower()
+
         client.patch("/api/settings", json={"values": {"agent_webhook": "http://agent.test/draft"}})
         monkeypatch.setattr(
             drafting,

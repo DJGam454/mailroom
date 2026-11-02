@@ -39,6 +39,10 @@ def update_settings(payload: SettingsUpdate, conn=Conn) -> dict[str, Any]:
     unknown = set(payload.values) - ALLOWED
     if unknown:
         raise HTTPException(status_code=400, detail=f"Unknown settings: {sorted(unknown)}")
+    if "agent_webhook" in payload.values:
+        webhook = str(payload.values["agent_webhook"] or "").strip()
+        if webhook and not webhook.startswith(("http://", "https://")):
+            raise HTTPException(status_code=400, detail="The agent webhook must start with http:// or https://")
     with conn:
         for key, value in payload.values.items():
             db.set_setting(conn, key, str(value))

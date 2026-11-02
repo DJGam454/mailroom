@@ -131,10 +131,12 @@ def agent_draft(
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             data = json.loads(response.read().decode("utf-8"))
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+    except (urllib.error.URLError, TimeoutError, UnicodeDecodeError, json.JSONDecodeError):
         return None
-    subject = str(data.get("subject") or "").strip()
-    body = str(data.get("body") or "").strip()
+    if not isinstance(data, dict):
+        return None
+    subject = str(data.get("subject") or "").strip()[:300]
+    body = str(data.get("body") or "").strip()[:20000]
     return (subject, body) if subject and body else None
 
 
@@ -208,9 +210,14 @@ def agent_redraft(conn, draft_id: int) -> tuple[dict[str, Any] | None, str | Non
     webhook = (db.settings_dict(conn).get("agent_webhook") or "").strip()
     if not webhook:
         return None, "Configure the agent webhook in Settings first"
+    if not webhook.startswith(("http://", "https://")):
+        return None, "The agent webhook must start with http:// or https://"
     generated = agent_draft(lead, campaign, AGENT_INSTRUCTION, webhook)
     if not generated:
         return None, "The agent did not return a valid subject and body"
+    current = db.one(conn, "SELECT status FROM drafts WHERE id = ?", (draft_id,))
+    if not current or current["status"] != "pending":
+        return None, "The draft is no longer pending"
     subject, body = generated
     now = db.now_iso()
     conn.execute(
