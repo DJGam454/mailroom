@@ -1141,7 +1141,7 @@ function openCampaignModal() {
             <div class="field"><label for="camp-min">Minimum gap (seconds)</label><input class="input" id="camp-min" name="min_gap_seconds" type="number" value="90" /></div>
             <div class="field"><label for="camp-max">Maximum gap (seconds)</label><input class="input" id="camp-max" name="max_gap_seconds" type="number" value="360" /></div>
           </div>
-          <div class="notice mt-12">Manual approval is the default. Auto mode is scaffolded but should stay off until you have verified the transport and DNS.</div>
+          <div class="notice mt-12">Auto mode is not implemented. Every send waits for human approval, regardless of the transport.</div>
         </div>
       </form>
     `,
@@ -1204,7 +1204,7 @@ function openCampaignSettings(id) {
           <div class="field"><label for="cs-gap-max">Maximum gap (seconds)</label><input class="input" id="cs-gap-max" name="max_gap_seconds" type="number" min="1" value="${esc(campaign.max_gap_seconds)}" /></div>
         </div>
         <div class="field mt-12"><label>Working days</label><div class="row wrap" style="gap:12px">${["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day, index) => `<label class="checkline"><input type="checkbox" name="days" value="${index + 1}" ${days.includes(index + 1) ? "checked" : ""}/> ${day}</label>`).join("")}</div></div>
-        <div class="notice mt-12">Auto-send is scaffolded in the schema but not active. All sends still require approval.</div>
+        <div class="notice mt-12">Auto-send is not implemented. Every send still requires approval.</div>
       </form>
     `,
     footer: `<button class="btn" data-action="close-modal">Cancel</button><button class="btn primary" type="submit" form="modal-form">Save campaign</button>`,
@@ -2027,7 +2027,8 @@ async function sheetSync(direction, dryRun) {
       body: JSON.stringify({ direction, dry_run: dryRun }),
     });
     const prefix = dryRun ? "Dry run" : "Sync";
-    toast(`${prefix}: ${result.conflicts?.length || 0} conflict(s), ${result.errors?.length || 0} error(s).`, result.conflicts?.length ? "error" : "success");
+    const failed = !result.ok || result.conflicts?.length || result.errors?.length;
+    toast(`${prefix}: ${result.conflicts?.length || 0} conflict(s), ${result.errors?.length || 0} error(s).`, failed ? "error" : "success");
     renderSheetResult(result);
   } catch (error) {
     toast(error.message, "error");
