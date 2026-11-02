@@ -1,7 +1,21 @@
 from __future__ import annotations
 
 from app import config, db
-from app.services import approvals, worker
+from app.services import approvals, sender, worker
+
+
+def test_message_headers_are_sanitized():
+    message = sender._build_message(
+        {"subject": "Hello\r\nBcc: evil@example.test", "body": "Body", "campaign_id": 1},
+        {"id": 1, "name": "Ada\r\nBcc: evil@example.test", "email": "ada@example.test"},
+        {"email": "sender@example.test", "display_name": "Sender\r\nBcc: evil@example.test"},
+        "example.test",
+    )
+    assert message["Bcc"] is None
+    assert "\r" not in str(message["Subject"])
+    assert "\n" not in str(message["Subject"])
+    assert "\r" not in str(message["To"])
+    assert sender.clean_header("a\r\nb") == "a b"
 
 
 def test_mock_send_marks_message_sent(seeded):

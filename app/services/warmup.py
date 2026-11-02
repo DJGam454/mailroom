@@ -411,11 +411,15 @@ def _process(queue_id: int) -> dict[str, Any]:
                 return {"ok": False, "retry": True, "reason": "Outside warmup window"}
 
             message = EmailMessage()
-            message["Subject"] = thread["subject"]
-            message["From"] = formataddr((source.get("display_name") or "", source["email"]))
-            message["To"] = formataddr((target.get("display_name") or "", target["email"]))
+            message["Subject"] = sender.clean_header(thread["subject"])
+            message["From"] = formataddr(
+                (sender.clean_header(source.get("display_name")), sender.clean_header(source["email"]))
+            )
+            message["To"] = formataddr(
+                (sender.clean_header(target.get("display_name")), sender.clean_header(target["email"]))
+            )
             message["Date"] = format_datetime(datetime.now(timezone.utc))
-            message["Message-ID"] = make_msgid(domain=source["email"].split("@", 1)[1])
+            message["Message-ID"] = make_msgid(domain=sender.clean_header(source["email"].split("@", 1)[1]))
             message.set_content(thread["body"])
             message_id = sender.dispatch_message(message, source, config.WARMUP_OUTBOX_DIR)
             cursor = conn.execute(
@@ -484,14 +488,18 @@ def _process(queue_id: int) -> dict[str, Any]:
                 return {"ok": False, "error": "No initial message"}
             reply_body = random.choice(REPLIES)
             message = EmailMessage()
-            message["Subject"] = f"Re: {initial['subject']}"
-            message["From"] = formataddr((target.get("display_name") or "", target["email"]))
-            message["To"] = formataddr((source.get("display_name") or "", source["email"]))
+            message["Subject"] = sender.clean_header(f"Re: {initial['subject']}")
+            message["From"] = formataddr(
+                (sender.clean_header(target.get("display_name")), sender.clean_header(target["email"]))
+            )
+            message["To"] = formataddr(
+                (sender.clean_header(source.get("display_name")), sender.clean_header(source["email"]))
+            )
             message["Date"] = format_datetime(datetime.now(timezone.utc))
-            message["Message-ID"] = make_msgid(domain=target["email"].split("@", 1)[1])
+            message["Message-ID"] = make_msgid(domain=sender.clean_header(target["email"].split("@", 1)[1]))
             if initial.get("message_id"):
-                message["In-Reply-To"] = initial["message_id"]
-                message["References"] = initial["message_id"]
+                message["In-Reply-To"] = sender.clean_header(initial["message_id"])
+                message["References"] = sender.clean_header(initial["message_id"])
             message.set_content(reply_body)
             message_id = sender.dispatch_message(message, target, config.WARMUP_OUTBOX_DIR)
             conn.execute(

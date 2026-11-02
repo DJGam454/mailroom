@@ -40,17 +40,22 @@ def mailbox_usage(conn, mailbox_id: int, campaign: dict[str, Any]) -> dict[str, 
     return row or {"mailbox_id": mailbox_id, "date": date, "sent": 0, "failed": 0, "bounces": 0}
 
 
+def clean_header(value: Any) -> str:
+    """Remove CR/LF so user-controlled fields cannot inject headers."""
+    return " ".join(str(value or "").split())
+
+
 def _build_message(draft: dict[str, Any], lead: dict[str, Any], mailbox: dict[str, Any], domain: str) -> EmailMessage:
     message = EmailMessage()
-    message["Subject"] = draft["subject"]
-    message["From"] = formataddr((mailbox.get("display_name") or "", mailbox["email"]))
-    message["To"] = formataddr((lead.get("name") or "", lead["email"]))
-    message["Reply-To"] = mailbox["email"]
+    message["Subject"] = clean_header(draft["subject"])
+    message["From"] = formataddr((clean_header(mailbox.get("display_name")), clean_header(mailbox["email"])))
+    message["To"] = formataddr((clean_header(lead.get("name")), clean_header(lead["email"])))
+    message["Reply-To"] = clean_header(mailbox["email"])
     message["Date"] = format_datetime(datetime.now(timezone.utc))
-    message["Message-ID"] = make_msgid(domain=domain)
+    message["Message-ID"] = make_msgid(domain=clean_header(domain))
     message["X-Mailroom-Campaign"] = str(draft.get("campaign_id", ""))
     message["X-Mailroom-Lead"] = str(lead["id"])
-    message["List-Unsubscribe"] = f"<mailto:unsubscribe@{domain}?subject=unsubscribe>"
+    message["List-Unsubscribe"] = f"<mailto:unsubscribe@{clean_header(domain)}?subject=unsubscribe>"
     message.set_content(draft["body"])
     return message
 
@@ -87,9 +92,10 @@ def _dispatch_smtp(message: EmailMessage, mailbox: dict[str, Any]) -> str:
                 client.starttls(context=ssl.create_default_context())
                 client.ehlo()
             except smtplib.SMTPNotSupportedError:
-                pass
+                if mailbox.get("smtp_username"):
+                    raise SendError("SMTP server does not support STARTTLS; refusing to send credentials in plaintext")
         if mailbox.get("smtp_username"):
-            client.login(mailbox["smtp_username"], password or "")
+            client.login(clean_header(mailbox["smtp_username"]), password or "")
         refused = client.send_message(message)
         if refused:
             raise SendError(f"SMTP refused recipients: {refused}")
@@ -104,6 +110,8 @@ def _dispatch_smtp(message: EmailMessage, mailbox: dict[str, Any]) -> str:
 def _dispatch_gas(message: EmailMessage, mailbox: dict[str, Any]) -> str:
     if not mailbox.get("gas_url"):
         raise SendError("Apps Script URL is missing")
+    if not mailbox["gas_url"].startswith("https://"):
+        raise SendError("Apps Script URL must use HTTPS")
     secret = crypto.decrypt(mailbox.get("gas_secret_enc")) or ""
     payload = json.dumps(
         {
@@ -157,16 +165,17 @@ def mark_read_imap(mailbox: dict[str, Any], message_id: str, important: bool = T
     Mock mailboxes and missing IMAP settings return False. The caller treats
     this as an optional provider-level signal, not a delivery requirement.
     """
-    host = mailbox.get("imap_host")
+    host = clean_header(mailbox.get("imap_host"))
     if not host or not mailbox.get("imap_username"):
         return False
+    message_id = clean_header(message_id)
     password = crypto.decrypt(mailbox.get("imap_password_enc"))
     if not password:
         return False
     try:
         client = imaplib.IMAP4_SSL(host, int(mailbox.get("imap_port") or 993), timeout=10)
         try:
-            client.login(mailbox["imap_username"], password)
+            client.login(clean_header(mailbox["imap_username"]), password)
             client.select("INBOX")
             search_id = message_id if message_id.startswith("<") else f"<{message_id}>"
             status, data = client.search(None, "HEADER", "Message-ID", search_id)
@@ -354,9 +363,13 @@ def test_mailbox_connection(mailbox: dict[str, Any]) -> dict[str, Any]:
                         client.starttls(context=ssl.create_default_context())
                         client.ehlo()
                     except smtplib.SMTPNotSupportedError:
-                        pass
+                        if mailbox.get("smtp_username"):
+                            return {
+                                "ok": False,
+                                "message": "SMTP server does not support STARTTLS; refusing to send credentials in plaintext.",
+                            }
                 if mailbox.get("smtp_username"):
-                    client.login(mailbox["smtp_username"], password or "")
+                    client.login(clean_header(mailbox["smtp_username"]), password or "")
                 return {"ok": True, "message": "SMTP login succeeded. No test email was sent."}
             finally:
                 try:
@@ -368,6 +381,8 @@ def test_mailbox_connection(mailbox: dict[str, Any]) -> dict[str, Any]:
     if transport == "gas":
         if not mailbox.get("gas_url"):
             return {"ok": False, "message": "Apps Script URL is missing."}
+        if not mailbox["gas_url"].startswith("https://"):
+            return {"ok": False, "message": "Apps Script URL must use HTTPS."}
         secret = crypto.decrypt(mailbox.get("gas_secret_enc")) or ""
         payload = json.dumps({"action": "ping", "secret": secret}).encode("utf-8")
         request = urllib.request.Request(
