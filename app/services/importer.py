@@ -108,27 +108,42 @@ def _csv_strength(notes: str) -> str:
 
 
 def map_csv_lead(row: dict[str, str]) -> dict[str, Any]:
-    email = (row.get("Email") or "").strip().lower()
-    company = (row.get("Doctor Name") or row.get("Business Name") or row.get("Company") or "").strip()
-    contact = (row.get("Contact Name") or "").strip()
-    notes = _trim(row.get("Notes") or "")
+    values = {str(key).strip().lower(): value for key, value in row.items()}
+
+    def pick(*names: str) -> str:
+        for name in names:
+            value = values.get(name.strip().lower())
+            if value is not None and str(value).strip():
+                return str(value).strip()
+        return ""
+
+    email = pick("Email").lower()
+    company = pick("Doctor Name", "Business Name", "Company")
+    contact = pick("Contact Name", "Name")
+    role = pick("Role", "Contact Title")
+    notes = _trim(pick("Notes"))
     grade_match = GRADE_RE.search(notes)
-    grade = grade_match.group(1).upper() if grade_match else ("C" if email.endswith(("@gmail.com", "@yahoo.com", "@outlook.com")) else "B")
+    grade = (
+        pick("Email Grade", "email_grade", "Grade").upper()[:4]
+        or (grade_match.group(1).upper() if grade_match else "")
+        or ("C" if email.endswith(("@gmail.com", "@yahoo.com", "@outlook.com")) else "B")
+    )
+    source = pick("Source") or "ICPExtractor CSV"
     return {
-        "external_id": (row.get("Lead ID") or email)[:500],
+        "external_id": (pick("Lead ID", "ID") or email)[:500],
         "name": (contact or company or email)[:200],
         "email": email,
-        "role": "Business owner" if contact else "Owner / team",
+        "role": (role or ("Business owner" if contact else "Owner / team"))[:120],
         "company": company[:240],
-        "industry": _trim(row.get("Industry"), 160),
+        "industry": _trim(pick("Industry"), 160),
         "company_domain": _email_domain(email),
-        "website": _trim(row.get("Website"), 500),
-        "city": "",
+        "website": _trim(pick("Website"), 500),
+        "city": _trim(pick("City"), 120),
         "notes": _csv_strength(notes),
-        "offer": _trim(row.get("Service Assigned"), 180),
+        "offer": _trim(pick("Offer", "Service Assigned"), 180),
         "email_grade": grade,
-        "verification": "Unknown",
-        "source": "ICPExtractor CSV",
+        "verification": _trim(pick("Verification") or "Unknown", 40),
+        "source": source,
     }
 
 

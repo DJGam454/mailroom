@@ -227,6 +227,22 @@ def test_approval_search(seeded):
         assert missing["total"] == 0
 
 
+def test_export_can_be_reimported(seeded):
+    with TestClient(app) as client:
+        campaigns = client.get("/api/campaigns").json()["items"]
+        source, target = campaigns[0], campaigns[1]
+        exported = client.get(f"/api/leads/export.csv?campaign_id={source['id']}")
+        assert exported.status_code == 200
+        response = client.post(
+            "/api/leads/import",
+            data={"campaign_id": str(target["id"])},
+            files={"file": ("mailroom-export.csv", exported.content, "text/csv")},
+        )
+        assert response.status_code == 200
+        assert response.json()["imported"] > 0
+        assert response.json()["skipped"] == 0
+
+
 def test_global_pause_blocks_approval(seeded):
     with TestClient(app) as client:
         saved = client.patch("/api/settings", json={"values": {"sending_paused": "1"}})

@@ -74,3 +74,50 @@ def test_import_is_idempotent(conn, tmp_path):
     assert first["imported"] == 1
     assert second["imported"] == 0
     assert second["skipped"] == 1
+
+
+def test_map_csv_lead_accepts_mailroom_export_headers():
+    record = importer.map_csv_lead(
+        {
+            "id": "42",
+            "name": "Ada Lovelace",
+            "email": "ADA@Example.test",
+            "role": "Founder",
+            "company": "Analytical Engines",
+            "industry": "Software",
+            "city": "Pune",
+            "website": "https://example.test",
+            "email_grade": "A",
+            "verification": "Deliverable",
+            "notes": "A strong local team.",
+            "status": "sent",
+        }
+    )
+    assert record["email"] == "ada@example.test"
+    assert record["external_id"] == "42"
+    assert record["name"] == "Ada Lovelace"
+    assert record["role"] == "Founder"
+    assert record["company"] == "Analytical Engines"
+    assert record["city"] == "Pune"
+    assert record["email_grade"] == "A"
+    assert record["verification"] == "Deliverable"
+    assert record["company_domain"] == "example.test"
+
+
+def test_map_csv_lead_accepts_icp_sheet_headers():
+    record = importer.map_csv_lead(
+        {
+            "Lead ID": "lead-1",
+            "Doctor Name": "Dr Meera Shah",
+            "Email": "MEERA@clinic.test",
+            "Industry": "Dental clinic",
+            "Service Assigned": "a website audit",
+            "Notes": "email grade: A; 272 reviews, 5.0 *",
+        }
+    )
+    assert record["email"] == "meera@clinic.test"
+    assert record["name"] == "Dr Meera Shah"
+    assert record["role"] == "Owner / team"
+    assert record["email_grade"] == "A"
+    assert record["offer"] == "a website audit"
+    assert "272 reviews" in record["notes"]
