@@ -13,6 +13,8 @@ def test_health_and_overview(seeded):
         overview = client.get("/api/overview")
         assert overview.status_code == 200
         assert overview.json()["stats"]["lead_count"] > 0
+        assert "warmup_active" in overview.json()["stats"]
+        assert client.get("/api/warmup").status_code == 200
 
 
 def test_approval_api(seeded):
@@ -39,8 +41,20 @@ def test_campaign_and_leads_api(seeded):
         assert client.get("/api/deliverability").status_code == 200
         assert client.get("/api/activity").status_code == 200
         assert client.get("/api/queue").status_code == 200
+        assert client.get("/api/sheets/status").status_code == 200
         settings = client.get("/api/settings").json()["values"]
         assert settings["sender_name"]
+
+
+def test_warmup_start_api(seeded):
+    with TestClient(app) as client:
+        first = client.get("/api/warmup").json()
+        assert first["summary"]["total"] == 25
+        started = client.post("/api/warmup/start", json={"daily_limit": 1})
+        assert started.status_code == 200
+        assert started.json()["started"] == 25
+        status = client.get("/api/warmup").json()
+        assert status["summary"]["active"] == 25
 
 
 def test_csv_import_upload(seeded):

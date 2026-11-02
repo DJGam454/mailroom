@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 os.environ.setdefault("MAILROOM_WORKER", "0")
+os.environ.setdefault("MAILROOM_WARMUP_WORKER", "0")
 os.environ.setdefault("MAILROOM_AUTO_SEED", "0")
 
 from app import config, db  # noqa: E402
