@@ -172,9 +172,30 @@ def send_now(queue_id: int) -> dict:
             return {"ok": False, "error": "Queue item not found"}
         if queue["status"] not in {"queued", "failed"}:
             return {"ok": False, "error": f"Queue item is {queue['status']}"}
+        now = db.now_iso()
+        if queue["status"] == "failed":
+            # A manual retry is an explicit operator override. Reset the
+            # attempt count and the dependent states so the item can actually
+            # pass the send-time eligibility checks.
+            conn.execute(
+                "UPDATE drafts SET status = 'queued', updated_at = ? WHERE id = ?",
+                (now, queue["draft_id"]),
+            )
+            conn.execute(
+                "UPDATE leads SET status = 'queued', updated_at = ? WHERE id = ?",
+                (now, queue["lead_id"]),
+            )
         conn.execute(
-            "UPDATE send_queue SET status = 'queued', scheduled_at = ?, updated_at = ? WHERE id = ?",
-            (db.now_iso(), db.now_iso(), queue_id),
+            "UPDATE send_queue SET status = 'queued', attempts = 0, last_error = NULL, "
+            "scheduled_at = ?, updated_at = ? WHERE id = ?",
+            (now, now, queue_id),
+        )
+        db.audit(
+            conn,
+            "queue_send_now",
+            "draft",
+            queue["draft_id"],
+            {"queue_id": queue_id, "previous_status": queue["status"]},
         )
     result = tick()
     item = next((row for row in result.get("results", []) if row.get("queue_id") == queue_id), None)

@@ -238,11 +238,58 @@ def read_tab(worksheet, headers: list[str]) -> list[dict[str, str]]:
     return rows
 
 
+def _extra_columns(
+    existing: list[list[str]],
+    headers: list[str],
+) -> tuple[dict[str, list[str]], int, list[str]]:
+    """Preserve helper columns a human added to the right of our schema.
+
+    The first column is the stable key (ID, Email or Mailbox). Rows are matched
+    by that key so a reordered sheet does not attach notes to the wrong record.
+    """
+    if not existing or len(existing[0]) <= len(headers):
+        return {}, 0, []
+    key_name = headers[0]
+    if key_name not in existing[0]:
+        return {}, 0, []
+    extra_header = [str(value or "") for value in existing[0][len(headers):]]
+    width = len(extra_header)
+    key_index = existing[0].index(key_name)
+    extras: dict[str, list[str]] = {}
+    for row in existing[1:]:
+        if len(row) <= len(headers) or key_index >= len(row):
+            continue
+        key = str(row[key_index]).strip()
+        if not key:
+            continue
+        extras[key] = [str(value or "") for value in row[len(headers):]]
+    return extras, width, extra_header
+
+
 def write_tab(worksheet, headers: list[str], rows: list[list[Any]]) -> None:
-    values = [headers] + [[str(value) if value is not None else "" for value in row] for row in rows]
-    worksheet.resize(rows=max(1000, len(values)), cols=max(len(headers), worksheet.col_count))
-    worksheet.clear()
+    existing = worksheet.get_all_values()
+    extras, extra_width, extra_header = _extra_columns(existing, headers)
+    width = len(headers) + extra_width
+    values = [headers + extra_header]
+    for row in rows:
+        key = str(row[0]) if row else ""
+        extra = extras.get(key, [])
+        values.append(
+            [
+                *(str(value) if value is not None else "" for value in row),
+                *(extra + [""] * (extra_width - len(extra))),
+            ]
+        )
+    worksheet.resize(rows=max(1000, len(values)), cols=max(width, worksheet.col_count))
     worksheet.update(values=values, range_name="A1", value_input_option="RAW")
+    if len(existing) > len(values):
+        # Blank only the rows that no longer exist. Values in helper columns
+        # for the remaining rows are kept above.
+        worksheet.update(
+            values=[[""] * width for _ in range(len(existing) - len(values))],
+            range_name=f"A{len(values) + 1}",
+            value_input_option="RAW",
+        )
 
 
 def build_lead_rows(conn) -> list[list[Any]]:
@@ -481,13 +528,21 @@ def apply_remote_leads(
             }
             conflicts.append(conflict)
             if policy == "remote" and not dry_run:
-                _apply_lead_fields(conn, local, remote)
+                try:
+                    _apply_lead_fields(conn, local, remote)
+                except Exception as exc:  # noqa: BLE001
+                    errors.append({"row": local["id"], "error": str(exc)})
+                    continue
                 _save_state(conn, "leads", str(local["id"]), _now(), _iso(remote_updated), content_hash=remote_hash)
                 updated += 1
             continue
         if remote_changed:
             if not dry_run:
-                _apply_lead_fields(conn, local, remote)
+                try:
+                    _apply_lead_fields(conn, local, remote)
+                except Exception as exc:  # noqa: BLE001
+                    errors.append({"row": local["id"], "error": str(exc)})
+                    continue
                 _save_state(conn, "leads", str(local["id"]), _now(), _iso(remote_updated), content_hash=remote_hash)
             updated += 1
         elif state is None and not dry_run:
@@ -542,22 +597,27 @@ def apply_remote_campaigns(
             if policy != "remote" or dry_run:
                 continue
         if remote_changed or (state is None and policy == "remote"):
-            fields = {
-                "name": (remote.get("Name") or local["name"]).strip(),
-                "status": (remote.get("Status") or local["status"]).strip().lower(),
-                # Auto-send is intentionally not implemented. A sheet edit can
-                # never bypass the human approval step.
-                "approval_mode": "manual",
-                "daily_limit": int(remote.get("Daily Limit") or local["daily_limit"]),
-                "per_domain_limit": int(remote.get("Per-Domain Limit") or local["per_domain_limit"]),
-                "timezone": (remote.get("Timezone") or local["timezone"]).strip(),
-                "window_start": (remote.get("Window Start") or local["window_start"]).strip(),
-                "window_end": (remote.get("Window End") or local["window_end"]).strip(),
-                "working_days": (remote.get("Working Days") or local["working_days"]).strip(),
-                "rotation_strategy": (remote.get("Rotation") or local["rotation_strategy"]).strip().lower(),
-            }
-            if fields["status"] not in {"draft", "active", "paused", "archived"}:
-                errors.append({"row": local["id"], "error": "Invalid campaign status"})
+            try:
+                fields = {
+                    "name": (remote.get("Name") or local["name"]).strip(),
+                    "status": (remote.get("Status") or local["status"]).strip().lower(),
+                    # Auto-send is intentionally not implemented. A sheet edit
+                    # can never bypass the human approval step.
+                    "approval_mode": "manual",
+                    "daily_limit": int(remote.get("Daily Limit") or local["daily_limit"]),
+                    "per_domain_limit": int(remote.get("Per-Domain Limit") or local["per_domain_limit"]),
+                    "timezone": (remote.get("Timezone") or local["timezone"]).strip(),
+                    "window_start": (remote.get("Window Start") or local["window_start"]).strip(),
+                    "window_end": (remote.get("Window End") or local["window_end"]).strip(),
+                    "working_days": (remote.get("Working Days") or local["working_days"]).strip(),
+                    "rotation_strategy": (remote.get("Rotation") or local["rotation_strategy"]).strip().lower(),
+                }
+                if fields["status"] not in {"draft", "active", "paused", "archived"}:
+                    raise ValueError("Invalid campaign status")
+                if fields["daily_limit"] < 1 or fields["per_domain_limit"] < 1:
+                    raise ValueError("Campaign limits must be at least 1")
+            except (TypeError, ValueError) as exc:
+                errors.append({"row": local["id"], "error": str(exc)})
                 continue
             if not dry_run:
                 try:

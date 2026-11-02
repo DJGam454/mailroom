@@ -49,16 +49,20 @@ def list_queue(
         """,
         (*params, limit),
     )
+    count_where = "WHERE campaign_id = ?" if campaign_id else ""
+    count_params = (campaign_id,) if campaign_id else ()
     counts = db.one(
         conn,
-        """
+        f"""
         SELECT
           SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END) AS queued,
           SUM(CASE WHEN status = 'leased' THEN 1 ELSE 0 END) AS leased,
           SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END) AS sent,
           SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed
         FROM send_queue
+        {count_where}
         """,
+        count_params,
     )
     return {"items": items, "counts": counts or {}}
 
