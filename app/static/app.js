@@ -483,7 +483,7 @@ function renderShell() {
                 ${group.items
                   .map(
                     ([page, label, iconName]) => `
-                      <a class="nav-item" href="#/${page}" data-page="${page}">
+                      <a class="nav-item" href="#/${page}" data-page="${page}" title="${esc(label)}" aria-label="${esc(label)}">
                         <span class="nav-icon">${icon(iconName, 17)}</span>
                         <span class="label">${esc(label)}</span>
                         ${page === "approvals" ? '<span class="nav-badge" id="approval-badge">0</span>' : ""}
