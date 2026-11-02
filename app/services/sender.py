@@ -200,8 +200,18 @@ def _check_eligible(conn, queue: dict[str, Any], draft: dict[str, Any], lead: di
         raise RetrySend("Domain is paused")
     if rotation.is_suppressed(conn, lead["email"]):
         raise SendError("Recipient is suppressed")
+    prior_send = db.one(
+        conn,
+        "SELECT id FROM messages WHERE lower(to_email) = lower(?) "
+        "AND direction = 'outbound' AND status = 'sent' LIMIT 1",
+        (lead["email"],),
+    )
+    if prior_send:
+        raise SendError("Recipient already received a message from Mailroom")
 
     settings = db.settings_dict(conn)
+    if settings.get("sending_paused") == "1":
+        raise RetrySend("Sending is paused globally in Settings")
     if settings.get("require_dns_pass") == "1" and (mailbox.get("transport") or "mock") != "mock":
         if not all(domain.get(field) == "pass" for field in ("mx_status", "spf_status", "dkim_status", "dmarc_status")):
             raise RetrySend("DNS is not fully verified for this domain")

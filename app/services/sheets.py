@@ -545,7 +545,9 @@ def apply_remote_campaigns(
             fields = {
                 "name": (remote.get("Name") or local["name"]).strip(),
                 "status": (remote.get("Status") or local["status"]).strip().lower(),
-                "approval_mode": (remote.get("Approval Mode") or local["approval_mode"]).strip().lower(),
+                # Auto-send is intentionally not implemented. A sheet edit can
+                # never bypass the human approval step.
+                "approval_mode": "manual",
                 "daily_limit": int(remote.get("Daily Limit") or local["daily_limit"]),
                 "per_domain_limit": int(remote.get("Per-Domain Limit") or local["per_domain_limit"]),
                 "timezone": (remote.get("Timezone") or local["timezone"]).strip(),

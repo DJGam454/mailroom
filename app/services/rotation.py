@@ -235,8 +235,48 @@ def schedule_draft(conn, draft_id: int, mailbox_id: int | None = None) -> dict[s
         raise NoMailboxAvailable("Lead or campaign not found")
     if is_suppressed(conn, lead["email"]):
         raise NoMailboxAvailable("Recipient is on the suppression list")
+    prior_send = db.one(
+        conn,
+        """
+        SELECT msg.id, msg.sent_at, c.name AS campaign_name
+        FROM messages msg
+        JOIN campaigns c ON c.id = msg.campaign_id
+        WHERE lower(msg.to_email) = lower(?)
+          AND msg.direction = 'outbound'
+          AND msg.status = 'sent'
+        ORDER BY msg.id DESC
+        LIMIT 1
+        """,
+        (lead["email"],),
+    )
+    if prior_send:
+        raise NoMailboxAvailable(
+            f"This contact was already emailed in {prior_send['campaign_name']}. "
+            "Mailroom blocks repeat sends to the same address."
+        )
+    queued_send = db.one(
+        conn,
+        """
+        SELECT q.id, c.name AS campaign_name
+        FROM send_queue q
+        JOIN leads l ON l.id = q.lead_id
+        JOIN campaigns c ON c.id = q.campaign_id
+        WHERE lower(l.email) = lower(?)
+          AND q.status IN ('queued', 'leased')
+          AND q.draft_id != ?
+        LIMIT 1
+        """,
+        (lead["email"], draft_id),
+    )
+    if queued_send:
+        raise NoMailboxAvailable(
+            f"This contact already has a queued send in {queued_send['campaign_name']}. "
+            "Cancel it before queueing another."
+        )
     if campaign["status"] != "active":
         raise NoMailboxAvailable("Campaign is not active")
+    if db.settings_dict(conn).get("sending_paused") == "1":
+        raise NoMailboxAvailable("Sending is paused globally in Settings")
 
     mailbox = None
     if mailbox_id:

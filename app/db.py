@@ -54,9 +54,13 @@ def init_db(path: Path | None = None) -> None:
         columns = {row[1] for row in conn.execute("PRAGMA table_info(sheet_sync_state)")}
         if "content_hash" not in columns:
             conn.execute("ALTER TABLE sheet_sync_state ADD COLUMN content_hash TEXT")
+        # Auto-send is not implemented. Keep every campaign on manual approval
+        # so an old row can never imply a bypass of the human step.
+        conn.execute("UPDATE campaigns SET approval_mode = 'manual' WHERE approval_mode != 'manual'")
         defaults = {
             "transport_mode": "mock",
             "require_dns_pass": "0",
+            "sending_paused": "0",
             "agent_webhook": "",
             "sender_name": "Alex Morgan",
             "sender_title": "Founder",

@@ -19,6 +19,10 @@ def deliverability(conn=Conn) -> dict[str, Any]:
         """
         SELECT d.*, COUNT(m.id) AS mailbox_count,
                COALESCE(SUM(u.sent), 0) AS sent_today,
+               (SELECT COUNT(*) FROM warmup_messages wm
+                 JOIN mailboxes wm_m ON wm_m.id = wm.mailbox_id
+                WHERE wm_m.domain_id = d.id AND wm.kind = 'initial'
+                  AND date(wm.sent_at) = date('now')) AS warmup_sent_today,
                COALESCE(SUM(m.daily_limit), 0) AS daily_capacity
         FROM domains d
         LEFT JOIN mailboxes m ON m.domain_id = d.id
@@ -33,6 +37,9 @@ def deliverability(conn=Conn) -> dict[str, Any]:
         SELECT m.id, m.email, m.display_name, m.daily_limit, m.hourly_limit, m.status, m.transport,
                d.name AS domain_name,
                COALESCE(u.sent, 0) AS sent_today,
+               (SELECT COUNT(*) FROM warmup_messages wm
+                 WHERE wm.mailbox_id = m.id AND wm.kind = 'initial'
+                   AND date(wm.sent_at) = date('now')) AS warmup_sent_today,
                COALESCE(u.failed, 0) AS failed_today,
                COALESCE(u.bounces, 0) AS bounces_today,
                (SELECT COUNT(*) FROM messages msg

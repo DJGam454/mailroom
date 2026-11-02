@@ -25,6 +25,9 @@ def _mailbox_rows(conn) -> list[dict[str, Any]]:
         """
         SELECT m.*, d.name AS domain_name, d.status AS domain_status,
                COALESCE(u.sent, 0) AS sent_today,
+               (SELECT COUNT(*) FROM warmup_messages wm
+                 WHERE wm.mailbox_id = m.id AND wm.kind = 'initial'
+                   AND date(wm.sent_at) = date('now')) AS warmup_sent_today,
                (SELECT COUNT(*) FROM messages msg
                  WHERE msg.mailbox_id = m.id AND msg.sent_at >= datetime('now', '-1 hour')) AS sent_hour,
                (SELECT group_concat(c.name, ', ')
@@ -37,7 +40,12 @@ def _mailbox_rows(conn) -> list[dict[str, Any]]:
         ORDER BY m.id
         """,
     )
-    return [mailbox_public(row) for row in rows]
+    items = []
+    for row in rows:
+        item = mailbox_public(row)
+        item["combined_sent_today"] = int(item.get("sent_today") or 0) + int(item.get("warmup_sent_today") or 0)
+        items.append(item)
+    return items
 
 
 @router.get("/mailboxes")

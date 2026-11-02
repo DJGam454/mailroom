@@ -15,6 +15,7 @@ router = APIRouter(prefix="/api", tags=["settings"])
 ALLOWED = {
     "transport_mode",
     "require_dns_pass",
+    "sending_paused",
     "agent_webhook",
     "sender_name",
     "sender_title",

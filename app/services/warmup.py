@@ -204,7 +204,7 @@ def profile_rows(conn) -> list[dict[str, Any]]:
     rows = db.rows(
         conn,
         """
-        SELECT m.id, m.email, m.display_name, m.timezone, m.status AS mailbox_status,
+        SELECT m.id, m.email, m.display_name, m.timezone, m.status AS mailbox_status, m.transport,
                d.name AS domain_name, d.id AS domain_id,
                p.enabled, p.status, p.started_at, p.daily_limit, p.reply_rate, p.open_rate,
                p.important_rate, p.last_run_at
@@ -578,6 +578,11 @@ def tick() -> dict[str, Any]:
                 if not _local_window(profile, settings):
                     continue
                 day = profile_day(profile.get("started_at"))
+                if profile["warmup_status"] == "ramping" and day > len(settings["ramp"]):
+                    conn.execute(
+                        "UPDATE warmup_profiles SET status = 'active', updated_at = ? WHERE mailbox_id = ?",
+                        (db.now_iso(), profile["id"]),
+                    )
                 target_count = ramp_target(day, int(profile["daily_limit"]), settings["ramp"])
                 # Count reservations as well as sends: threads created today
                 # are already committed volume even if their send is still queued.

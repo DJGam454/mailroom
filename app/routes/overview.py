@@ -39,6 +39,7 @@ def overview(conn=Conn) -> dict[str, Any]:
         app_settings.get("google_sheets_spreadsheet_id")
         and app_settings.get("google_sheets_credentials_enc")
     )
+    stats["sending_paused"] = app_settings.get("sending_paused") == "1"
 
     campaign_ids = db.rows(conn, "SELECT id FROM campaigns ORDER BY id DESC")
     campaigns = [campaign_with_counts(conn, row["id"]) for row in campaign_ids]

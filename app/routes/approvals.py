@@ -19,6 +19,7 @@ router = APIRouter(prefix="/api", tags=["approvals"])
 def pending_approvals(
     conn=Conn,
     campaign_id: int | None = None,
+    q: str | None = None,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=100),
 ) -> dict[str, Any]:
@@ -27,7 +28,15 @@ def pending_approvals(
     if campaign_id:
         where += " AND d.campaign_id = ?"
         params.append(campaign_id)
-    total_row = db.one(conn, f"SELECT COUNT(*) AS count FROM drafts d {where}", tuple(params))
+    if q and q.strip():
+        like = f"%{q.strip()}%"
+        where += " AND (l.name LIKE ? OR l.email LIKE ? OR l.company LIKE ? OR l.role LIKE ?)"
+        params.extend([like, like, like, like])
+    total_row = db.one(
+        conn,
+        f"SELECT COUNT(*) AS count FROM drafts d JOIN leads l ON l.id = d.lead_id {where}",
+        tuple(params),
+    )
     total = int(total_row["count"]) if total_row else 0
     offset = (page - 1) * page_size
     items = db.rows(

@@ -86,7 +86,7 @@ def _process(queue_id: int) -> dict:
         conn.execute("BEGIN IMMEDIATE")
         _finish_failure(conn, queue_id, f"Retry: {exc}", 300, count_attempt=False)
         conn.commit()
-        return {"ok": False, "retry": True, "reason": str(exc)}
+        return {"ok": False, "retry": True, "reason": str(exc), "error": str(exc)}
     except sender.SendError as exc:
         conn.rollback()
         conn.execute("BEGIN IMMEDIATE")
@@ -176,7 +176,11 @@ def send_now(queue_id: int) -> dict:
             "UPDATE send_queue SET status = 'queued', scheduled_at = ?, updated_at = ? WHERE id = ?",
             (db.now_iso(), db.now_iso(), queue_id),
         )
-    return tick()
+    result = tick()
+    item = next((row for row in result.get("results", []) if row.get("queue_id") == queue_id), None)
+    if item is None:
+        return {"ok": False, "error": result.get("skipped") or "The queue item could not be processed."}
+    return item
 
 
 def cancel(queue_id: int, reason: str = "Cancelled by operator") -> dict:

@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field, field_validator
 class CampaignCreate(BaseModel):
     name: str = Field(min_length=2, max_length=120)
     status: Literal["draft", "active", "paused", "archived"] = "draft"
-    approval_mode: Literal["manual", "auto"] = "manual"
+    approval_mode: Literal["manual"] = "manual"
     daily_limit: int = Field(default=250, ge=1, le=10000)
     per_domain_limit: int = Field(default=50, ge=1, le=1000)
     timezone: str = "Asia/Kolkata"
@@ -34,7 +34,7 @@ class CampaignCreate(BaseModel):
 class CampaignUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=2, max_length=120)
     status: Literal["draft", "active", "paused", "archived"] | None = None
-    approval_mode: Literal["manual", "auto"] | None = None
+    approval_mode: Literal["manual"] | None = None
     daily_limit: int | None = Field(default=None, ge=1, le=10000)
     per_domain_limit: int | None = Field(default=None, ge=1, le=1000)
     timezone: str | None = None

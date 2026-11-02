@@ -31,6 +31,7 @@ def list_queue(
     else:
         clauses.append("q.status IN ('queued', 'leased', 'failed')")
     where = "WHERE " + " AND ".join(clauses)
+    order = "DESC" if status == "sent" else "ASC"
     items = db.rows(
         conn,
         f"""
@@ -43,7 +44,7 @@ def list_queue(
         JOIN mailboxes m ON m.id = q.mailbox_id
         JOIN campaigns c ON c.id = q.campaign_id
         {where}
-        ORDER BY q.scheduled_at ASC, q.id ASC
+        ORDER BY q.scheduled_at {order}, q.id {order}
         LIMIT ?
         """,
         (*params, limit),
