@@ -137,7 +137,7 @@ def _count(conn, sql: str, params: tuple[Any, ...]) -> int:
 def sent_today(conn, mailbox_id: int) -> int:
     return _count(
         conn,
-        "SELECT COUNT(*) AS count FROM warmup_messages WHERE mailbox_id = ? AND kind = 'initial' AND date(sent_at) = date('now')",
+        "SELECT COUNT(*) AS count FROM warmup_messages WHERE mailbox_id = ? AND kind = 'initial' AND date(sent_at, 'localtime') = date('now', 'localtime')",
         (mailbox_id,),
     )
 
@@ -145,7 +145,7 @@ def sent_today(conn, mailbox_id: int) -> int:
 def received_today(conn, email: str) -> int:
     return _count(
         conn,
-        "SELECT COUNT(*) AS count FROM warmup_messages WHERE to_email = ? AND kind = 'initial' AND date(sent_at) = date('now')",
+        "SELECT COUNT(*) AS count FROM warmup_messages WHERE to_email = ? AND kind = 'initial' AND date(sent_at, 'localtime') = date('now', 'localtime')",
         (email,),
     )
 
@@ -153,7 +153,7 @@ def received_today(conn, email: str) -> int:
 def replies_today(conn, mailbox_id: int) -> int:
     return _count(
         conn,
-        "SELECT COUNT(*) AS count FROM warmup_messages WHERE mailbox_id = ? AND kind = 'reply' AND date(sent_at) = date('now')",
+        "SELECT COUNT(*) AS count FROM warmup_messages WHERE mailbox_id = ? AND kind = 'reply' AND date(sent_at, 'localtime') = date('now', 'localtime')",
         (mailbox_id,),
     )
 
@@ -161,7 +161,7 @@ def replies_today(conn, mailbox_id: int) -> int:
 def threads_today(conn, mailbox_id: int) -> int:
     return _count(
         conn,
-        "SELECT COUNT(*) AS count FROM warmup_threads WHERE source_mailbox_id = ? AND date(created_at) = date('now')",
+        "SELECT COUNT(*) AS count FROM warmup_threads WHERE source_mailbox_id = ? AND date(created_at, 'localtime') = date('now', 'localtime')",
         (mailbox_id,),
     )
 
@@ -172,7 +172,7 @@ def domain_sent_today(conn, domain_id: int) -> int:
         """
         SELECT COUNT(*) AS count FROM warmup_messages wm
         JOIN mailboxes m ON m.id = wm.mailbox_id
-        WHERE m.domain_id = ? AND wm.kind = 'initial' AND date(wm.sent_at) = date('now')
+        WHERE m.domain_id = ? AND wm.kind = 'initial' AND date(wm.sent_at, 'localtime') = date('now', 'localtime')
         """,
         (domain_id,),
     )
@@ -183,10 +183,10 @@ def health_for(conn, mailbox: dict[str, Any]) -> int:
         conn,
         """
         SELECT
-          (SELECT COUNT(*) FROM warmup_messages WHERE mailbox_id = ? AND kind = 'initial' AND date(sent_at) >= date('now', '-6 days')) AS sent7,
-          (SELECT COUNT(*) FROM warmup_messages WHERE mailbox_id = ? AND kind = 'reply' AND date(sent_at) >= date('now', '-6 days')) AS replies7,
-          (SELECT COUNT(*) FROM warmup_messages WHERE mailbox_id = ? AND kind = 'initial' AND read_at IS NOT NULL AND date(sent_at) >= date('now', '-6 days')) AS opened7,
-          (SELECT COUNT(*) FROM warmup_messages WHERE to_email = ? AND kind = 'initial' AND date(sent_at) >= date('now', '-6 days')) AS received7
+          (SELECT COUNT(*) FROM warmup_messages WHERE mailbox_id = ? AND kind = 'initial' AND date(sent_at, 'localtime') >= date('now', '-6 days', 'localtime')) AS sent7,
+          (SELECT COUNT(*) FROM warmup_messages WHERE mailbox_id = ? AND kind = 'reply' AND date(sent_at, 'localtime') >= date('now', '-6 days', 'localtime')) AS replies7,
+          (SELECT COUNT(*) FROM warmup_messages WHERE mailbox_id = ? AND kind = 'initial' AND read_at IS NOT NULL AND date(sent_at, 'localtime') >= date('now', '-6 days', 'localtime')) AS opened7,
+          (SELECT COUNT(*) FROM warmup_messages WHERE to_email = ? AND kind = 'initial' AND date(sent_at, 'localtime') >= date('now', '-6 days', 'localtime')) AS received7
         """,
         (mailbox["id"], mailbox["id"], mailbox["id"], mailbox["email"]),
     ) or {}
@@ -242,7 +242,7 @@ def choose_target(conn, source: dict[str, Any], settings: dict[str, Any] | None 
         SELECT m.*, d.name AS domain_name,
                p.daily_limit AS warmup_limit,
                (SELECT COUNT(*) FROM warmup_messages wm
-                 WHERE wm.to_email = m.email AND wm.kind = 'initial' AND date(wm.sent_at) = date('now')) AS received_today,
+                 WHERE wm.to_email = m.email AND wm.kind = 'initial' AND date(wm.sent_at, 'localtime') = date('now', 'localtime')) AS received_today,
                (SELECT COUNT(*) FROM warmup_threads wt
                  WHERE wt.source_mailbox_id = ? AND wt.target_mailbox_id = m.id) AS pair_count
         FROM mailboxes m
@@ -748,10 +748,10 @@ def status(conn) -> dict[str, Any]:
         SELECT
           (SELECT COUNT(*) FROM warmup_queue WHERE status = 'queued') AS queued,
           (SELECT COUNT(*) FROM warmup_queue WHERE status = 'failed') AS failed,
-          (SELECT COUNT(*) FROM warmup_threads WHERE date(created_at) = date('now')) AS threads_today,
-          (SELECT COUNT(*) FROM warmup_messages WHERE kind = 'initial' AND date(sent_at) = date('now')) AS sent_today,
-          (SELECT COUNT(*) FROM warmup_messages WHERE kind = 'reply' AND date(sent_at) = date('now')) AS replies_today,
-          (SELECT COUNT(*) FROM warmup_messages WHERE kind = 'initial' AND read_at IS NOT NULL AND date(sent_at) = date('now')) AS opened_today
+          (SELECT COUNT(*) FROM warmup_threads WHERE date(created_at, 'localtime') = date('now', 'localtime')) AS threads_today,
+          (SELECT COUNT(*) FROM warmup_messages WHERE kind = 'initial' AND date(sent_at, 'localtime') = date('now', 'localtime')) AS sent_today,
+          (SELECT COUNT(*) FROM warmup_messages WHERE kind = 'reply' AND date(sent_at, 'localtime') = date('now', 'localtime')) AS replies_today,
+          (SELECT COUNT(*) FROM warmup_messages WHERE kind = 'initial' AND read_at IS NOT NULL AND date(sent_at, 'localtime') = date('now', 'localtime')) AS opened_today
         """,
     ) or {}
     average_health = round(sum(profile["health"] for profile in active) / len(active)) if active else 0

@@ -19,7 +19,8 @@ def campaign_with_counts(conn, campaign_id: int) -> dict[str, Any] | None:
                (SELECT COUNT(*) FROM send_queue q WHERE q.campaign_id = c.id AND q.status IN ('queued', 'leased')) AS queued_count,
                (SELECT COUNT(DISTINCT cm.mailbox_id) FROM campaign_mailboxes cm WHERE cm.campaign_id = c.id AND cm.enabled = 1) AS mailbox_count,
                (SELECT COUNT(*) FROM messages msg
-                 WHERE msg.campaign_id = c.id AND date(msg.sent_at) = date('now')) AS sent_today
+                 WHERE msg.campaign_id = c.id
+                   AND date(msg.sent_at, 'localtime') = date('now', 'localtime')) AS sent_today
         FROM campaigns c
         WHERE c.id = ?
         """,

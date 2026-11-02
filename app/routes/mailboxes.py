@@ -28,7 +28,7 @@ def _mailbox_rows(conn) -> list[dict[str, Any]]:
                COALESCE(u.sent, 0) AS sent_today,
                (SELECT COUNT(*) FROM warmup_messages wm
                  WHERE wm.mailbox_id = m.id AND wm.kind = 'initial'
-                   AND date(wm.sent_at) = date('now')) AS warmup_sent_today,
+                   AND date(wm.sent_at, 'localtime') = date('now', 'localtime')) AS warmup_sent_today,
                (SELECT COUNT(*) FROM messages msg
                  WHERE msg.mailbox_id = m.id AND msg.sent_at >= datetime('now', '-1 hour')) AS sent_hour,
                (SELECT group_concat(c.name, ', ')
@@ -41,7 +41,7 @@ def _mailbox_rows(conn) -> list[dict[str, Any]]:
                  WHERE cm.mailbox_id = m.id AND cm.enabled = 1) AS campaign_ids_csv
         FROM mailboxes m
         JOIN domains d ON d.id = m.domain_id
-        LEFT JOIN mailbox_usage_daily u ON u.mailbox_id = m.id AND u.date = date('now')
+        LEFT JOIN mailbox_usage_daily u ON u.mailbox_id = m.id AND u.date = date('now', 'localtime')
         ORDER BY m.id
         """,
     )
@@ -204,7 +204,7 @@ def list_domains(conn=Conn) -> dict[str, Any]:
                COALESCE(SUM(u.sent), 0) AS sent_today
         FROM domains d
         LEFT JOIN mailboxes m ON m.domain_id = d.id
-        LEFT JOIN mailbox_usage_daily u ON u.mailbox_id = m.id AND u.date = date('now')
+        LEFT JOIN mailbox_usage_daily u ON u.mailbox_id = m.id AND u.date = date('now', 'localtime')
         GROUP BY d.id
         ORDER BY d.name
         """,

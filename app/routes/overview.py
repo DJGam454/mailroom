@@ -23,7 +23,7 @@ def overview(conn=Conn) -> dict[str, Any]:
           (SELECT COUNT(*) FROM leads) AS lead_count,
           (SELECT COUNT(*) FROM drafts WHERE status = 'pending') AS pending_count,
           (SELECT COUNT(*) FROM send_queue WHERE status IN ('queued', 'leased')) AS queued_count,
-          (SELECT COUNT(*) FROM messages WHERE status = 'sent' AND date(sent_at) = date('now')) AS sent_today,
+          (SELECT COUNT(*) FROM messages WHERE status = 'sent' AND date(sent_at, 'localtime') = date('now', 'localtime')) AS sent_today,
           (SELECT COUNT(*) FROM messages WHERE status = 'sent') AS sent_total,
           (SELECT COUNT(*) FROM campaigns WHERE status = 'active') AS active_campaigns,
           (SELECT COUNT(*) FROM mailboxes WHERE status = 'active') AS active_mailboxes,
@@ -31,8 +31,8 @@ def overview(conn=Conn) -> dict[str, Any]:
           (SELECT COUNT(*) FROM suppression) AS suppressed,
           (SELECT COUNT(*) FROM send_queue WHERE status = 'failed') AS failed_queue,
           (SELECT COUNT(*) FROM warmup_profiles WHERE enabled = 1 AND status IN ('ramping', 'active')) AS warmup_active,
-          (SELECT COUNT(*) FROM warmup_messages WHERE kind = 'initial' AND date(sent_at) = date('now')) AS warmup_sent_today,
-          (SELECT COUNT(*) FROM warmup_messages WHERE kind = 'reply' AND date(sent_at) = date('now')) AS warmup_replies_today
+          (SELECT COUNT(*) FROM warmup_messages WHERE kind = 'initial' AND date(sent_at, 'localtime') = date('now', 'localtime')) AS warmup_sent_today,
+          (SELECT COUNT(*) FROM warmup_messages WHERE kind = 'reply' AND date(sent_at, 'localtime') = date('now', 'localtime')) AS warmup_replies_today
         """,
     ) or {}
     stats["sheets_configured"] = bool(
@@ -53,7 +53,7 @@ def overview(conn=Conn) -> dict[str, Any]:
                  WHERE msg.mailbox_id = m.id AND msg.sent_at >= datetime('now', '-1 hour')) AS sent_hour
         FROM mailboxes m
         JOIN domains d ON d.id = m.domain_id
-        LEFT JOIN mailbox_usage_daily u ON u.mailbox_id = m.id AND u.date = date('now')
+        LEFT JOIN mailbox_usage_daily u ON u.mailbox_id = m.id AND u.date = date('now', 'localtime')
         ORDER BY u.sent DESC, m.id
         LIMIT 8
         """,
@@ -81,7 +81,7 @@ def overview(conn=Conn) -> dict[str, Any]:
         """
         SELECT date, SUM(sent) AS sent, SUM(failed) AS failed
         FROM mailbox_usage_daily
-        WHERE date >= date('now', '-6 days')
+        WHERE date >= date('now', '-6 days', 'localtime')
         GROUP BY date
         ORDER BY date
         """,
