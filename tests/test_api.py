@@ -325,6 +325,20 @@ def test_campaign_and_leads_api(seeded):
         assert not any(key.endswith("_enc") for key in settings)
 
 
+def test_domain_settings_patch(seeded):
+    with TestClient(app) as client:
+        domain = client.get("/api/domains").json()["items"][0]
+        updated = client.patch(
+            f"/api/domains/{domain['id']}",
+            json={"provider": "Google Workspace", "dkim_selector": "google", "status": "paused"},
+        )
+        assert updated.status_code == 200
+        assert updated.json()["item"]["dkim_selector"] == "google"
+        assert updated.json()["item"]["status"] == "paused"
+        missing = client.patch("/api/domains/99999", json={"dkim_selector": "google"})
+        assert missing.status_code == 404
+
+
 def test_suppression_api(seeded):
     with TestClient(app) as client:
         created = client.post("/api/suppression", json={"email": "stop@example.test", "reason": "manual"})

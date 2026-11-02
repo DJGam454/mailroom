@@ -223,6 +223,8 @@ def create_domain(payload: DomainCreate, conn=Conn) -> dict[str, Any]:
 
 @router.patch("/domains/{domain_id}")
 def update_domain(domain_id: int, payload: DomainUpdate, conn=Conn) -> dict[str, Any]:
+    if not db.one(conn, "SELECT id FROM domains WHERE id = ?", (domain_id,)):
+        raise HTTPException(status_code=404, detail="Domain not found")
     data = payload.model_dump(exclude_unset=True)
     allowed = {"provider", "dkim_selector", "status"}
     updates = {key: value for key, value in data.items() if key in allowed and value is not None}

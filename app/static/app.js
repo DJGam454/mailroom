@@ -1497,7 +1497,7 @@ async function renderInboxes(token) {
           <div class="domain-top"><div class="domain-icon">${icon("globe", 16)}</div><div style="min-width:0;flex:1"><div class="domain-name">${esc(domain.name)}</div><div class="domain-provider">${esc(domain.provider || "custom")} · ${fmtNumber(domain.mailbox_count)} inboxes</div></div>${domain.status === "active" ? '<span class="chip green">Active</span>' : '<span class="chip gray">Paused</span>'}</div>
           <div class="dns-pills">${dnsChip("MX", domain.mx_status)}${dnsChip("SPF", domain.spf_status)}${dnsChip("DKIM", domain.dkim_status)}${dnsChip("DMARC", domain.dmarc_status)}</div>
           <div class="domain-stats"><span><strong>${fmtNumber(domain.sent_today)}</strong> sent today</span><span><strong>${fmtNumber(domain.mailbox_count)}</strong> inboxes</span><span class="muted-2">${domain.last_check_at ? `checked ${esc(fmtRelative(domain.last_check_at))}` : "not checked"}</span></div>
-          <div class="row mt-12"><button class="btn sm" data-action="check-domain" data-id="${domain.id}">${icon("refresh", 12)} Check DNS</button><button class="btn sm ghost" data-action="new-mailbox" data-domain="${domain.id}">${icon("plus", 12)} Add inbox</button></div>
+          <div class="row mt-12"><button class="btn sm" data-action="check-domain" data-id="${domain.id}">${icon("refresh", 12)} Check DNS</button><button class="btn sm ghost" data-action="new-mailbox" data-domain="${domain.id}">${icon("plus", 12)} Add inbox</button><button class="icon-btn bordered" data-action="domain-settings" data-id="${domain.id}" title="Domain settings" aria-label="Domain settings">${icon("settings", 13)}</button></div>
         </div>
       `).join("") || `<div class="card">${emptyState("No domains yet", "Add a sending domain, then add mailboxes under it.", "globe")}</div>`}
     </div>
@@ -1548,6 +1548,36 @@ function openDomainModal() {
         }),
       });
       toast("Domain added. Run a DNS check next.");
+      renderPage();
+    },
+  });
+}
+
+function openDomainSettings(id) {
+  const domain = state.domains.find((item) => Number(item.id) === Number(id));
+  if (!domain) return;
+  openModal({
+    title: "Domain settings",
+    sub: domain.name,
+    body: `
+      <form id="modal-form">
+        <div class="field"><label for="ds-provider">Provider label</label><input class="input" id="ds-provider" name="provider" value="${esc(domain.provider || "")}" placeholder="Google Workspace, Microsoft 365, custom..." /></div>
+        <div class="field mt-12"><label for="ds-selector">DKIM selector</label><input class="input" id="ds-selector" name="dkim_selector" value="${esc(domain.dkim_selector || "mail")}" /><div class="hint">The selector used for <code>&lt;selector&gt;._domainkey.${esc(domain.name)}</code>. Change it, save, then run Check DNS.</div></div>
+        <div class="field mt-12"><label for="ds-status">Status</label><select class="select" id="ds-status" name="status"><option value="active" ${domain.status === "active" ? "selected" : ""}>Active</option><option value="paused" ${domain.status === "paused" ? "selected" : ""}>Paused</option></select></div>
+        <div class="notice mt-12">Pausing a domain stops campaign and warmup sends from every mailbox on it.</div>
+      </form>
+    `,
+    footer: `<button class="btn" data-action="close-modal">Cancel</button><button class="btn primary" type="submit" form="modal-form">Save domain</button>`,
+    onSubmit: async (formData) => {
+      await api(`/domains/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          provider: formData.get("provider"),
+          dkim_selector: formData.get("dkim_selector") || "mail",
+          status: formData.get("status"),
+        }),
+      });
+      toast("Domain settings saved. Run Check DNS if the selector changed.");
       renderPage();
     },
   });
@@ -2471,6 +2501,10 @@ document.addEventListener("click", async (event) => {
   }
   if (action === "pause-mailbox" || action === "resume-mailbox") {
     await toggleMailbox(id, action === "pause-mailbox" ? "pause" : "resume");
+    return;
+  }
+  if (action === "domain-settings") {
+    openDomainSettings(id);
     return;
   }
   if (action === "check-domain") {
