@@ -12,6 +12,16 @@ def first_pending(conn) -> dict:
     return draft
 
 
+def test_all_day_window_includes_the_last_minute(seeded):
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    campaign = db.one(seeded, "SELECT * FROM campaigns ORDER BY id LIMIT 1")
+    at = datetime(2026, 11, 2, 23, 59, 30, tzinfo=ZoneInfo("Asia/Kolkata"))
+    assert rotation.window_state(campaign, at)["inside"] is True
+    assert rotation.next_window_start(campaign, at) <= at
+
+
 def test_seed_has_a_full_rotation_pool(seeded):
     campaign = db.one(seeded, "SELECT * FROM campaigns WHERE name LIKE 'Demo - NCR SME%'")
     assert campaign

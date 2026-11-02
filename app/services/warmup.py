@@ -115,6 +115,8 @@ def _local_window(mailbox: dict[str, Any], settings: dict[str, Any]) -> bool:
         end_h, end_m = [int(part) for part in settings["window_end"].split(":")]
     except ValueError:
         return True
+    if rotation.window_is_all_day(settings["window_start"], settings["window_end"]):
+        return True
     start = now.replace(hour=start_h, minute=start_m, second=0, microsecond=0)
     end = now.replace(hour=end_h, minute=end_m, second=0, microsecond=0)
     return start <= now <= end

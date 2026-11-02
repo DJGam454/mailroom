@@ -65,6 +65,12 @@ def _time_parts(value: str, fallback: tuple[int, int]) -> tuple[int, int]:
         return fallback
 
 
+def window_is_all_day(start_value: str | None, end_value: str | None) -> bool:
+    start_h, start_m = _time_parts(start_value or "00:00", (0, 0))
+    end_h, end_m = _time_parts(end_value or "23:59", (23, 59))
+    return (start_h, start_m) == (0, 0) and (end_h, end_m) >= (23, 59)
+
+
 def window_state(campaign: dict[str, Any], at: datetime | None = None) -> dict[str, Any]:
     tz = campaign_tz(campaign)
     current = (at or now_utc()).astimezone(tz)
@@ -73,7 +79,8 @@ def window_state(campaign: dict[str, Any], at: datetime | None = None) -> dict[s
     start = current.replace(hour=start_h, minute=start_m, second=0, microsecond=0)
     end = current.replace(hour=end_h, minute=end_m, second=0, microsecond=0)
     days = working_days(campaign)
-    inside = current.isoweekday() in days and start <= current <= end
+    all_day = window_is_all_day(campaign.get("window_start"), campaign.get("window_end"))
+    inside = current.isoweekday() in days and (all_day or start <= current <= end)
     return {
         "inside": inside,
         "local_now": current,
@@ -91,11 +98,12 @@ def next_window_start(campaign: dict[str, Any], at: datetime | None = None) -> d
     start_h, start_m = _time_parts(campaign.get("window_start", "09:30"), (9, 30))
     end_h, end_m = _time_parts(campaign.get("window_end", "17:30"), (17, 30))
     days = working_days(campaign)
+    all_day = window_is_all_day(campaign.get("window_start"), campaign.get("window_end"))
 
     if current.isoweekday() in days:
         start = current.replace(hour=start_h, minute=start_m, second=0, microsecond=0)
         end = current.replace(hour=end_h, minute=end_m, second=0, microsecond=0)
-        if start <= current <= end:
+        if all_day or start <= current <= end:
             return current.astimezone(timezone.utc)
         if current < start:
             return start.astimezone(timezone.utc)
