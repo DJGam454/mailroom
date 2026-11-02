@@ -41,6 +41,49 @@ def test_mock_send_marks_message_sent(seeded):
     assert files
 
 
+def test_campaign_daily_limit_blocks_a_burst(seeded):
+    campaign = db.one(
+        seeded,
+        """
+        SELECT c.* FROM campaigns c
+        WHERE (SELECT COUNT(*) FROM drafts d WHERE d.campaign_id = c.id AND d.status = 'pending') >= 2
+          AND (SELECT COUNT(*) FROM messages m WHERE m.campaign_id = c.id AND m.status = 'sent'
+               AND date(m.sent_at, 'localtime') = date('now', 'localtime')) = 0
+        ORDER BY c.id LIMIT 1
+        """,
+    )
+    assert campaign
+    drafts = db.rows(
+        seeded,
+        "SELECT * FROM drafts WHERE campaign_id = ? AND status = 'pending' ORDER BY id LIMIT 2",
+        (campaign["id"],),
+    )
+    assert len(drafts) == 2
+    with db.transaction() as conn:
+        conn.execute("UPDATE campaigns SET daily_limit = 1 WHERE id = ?", (campaign["id"],))
+    queue_ids = []
+    for draft in drafts:
+        with db.transaction() as conn:
+            result = approvals.approve_draft(conn, draft["id"])
+        queue_ids.append(result["queue"]["id"])
+    with db.transaction() as conn:
+        conn.executemany(
+            "UPDATE send_queue SET scheduled_at = ? WHERE id = ?",
+            [(db.now_iso(), queue_id) for queue_id in queue_ids],
+        )
+    sent = worker.tick()
+    assert sent["sent"] == 1
+    messages = db.one(
+        seeded,
+        "SELECT COUNT(*) AS count FROM messages WHERE campaign_id = ? AND status = 'sent'",
+        (campaign["id"],),
+    )
+    assert messages["count"] == 1
+    blocked = db.one(seeded, "SELECT status, last_error FROM send_queue WHERE id = ?", (queue_ids[1],))
+    assert blocked["status"] == "queued"
+    assert "Campaign daily limit reached" in (blocked["last_error"] or "")
+
+
 def test_global_pause_blocks_the_worker(seeded):
     draft = db.one(seeded, "SELECT * FROM drafts WHERE status = 'pending' ORDER BY id LIMIT 1")
     with db.transaction() as conn:

@@ -228,6 +228,8 @@ def _check_eligible(conn, queue: dict[str, Any], draft: dict[str, Any], lead: di
     state = rotation.window_state(campaign)
     if not state["inside"]:
         raise RetrySend("Outside the campaign send window")
+    if rotation.campaign_sent_today(conn, campaign) >= int(campaign["daily_limit"]):
+        raise RetrySend("Campaign daily limit reached")
 
     usage = mailbox_usage(conn, mailbox["id"], campaign)
     if int(usage["sent"]) >= int(mailbox["daily_limit"]):

@@ -92,6 +92,25 @@ def window_state(campaign: dict[str, Any], at: datetime | None = None) -> dict[s
     }
 
 
+def campaign_day_bounds(campaign: dict[str, Any], at: datetime | None = None) -> tuple[str, str]:
+    tz = campaign_tz(campaign)
+    current = (at or now_utc()).astimezone(tz)
+    start = current.replace(hour=0, minute=0, second=0, microsecond=0)
+    end = start + timedelta(days=1)
+    return iso(start.astimezone(timezone.utc)), iso(end.astimezone(timezone.utc))
+
+
+def campaign_sent_today(conn, campaign: dict[str, Any], at: datetime | None = None) -> int:
+    start, end = campaign_day_bounds(campaign, at)
+    row = db.one(
+        conn,
+        "SELECT COUNT(*) AS count FROM messages "
+        "WHERE campaign_id = ? AND status = 'sent' AND sent_at >= ? AND sent_at < ?",
+        (campaign["id"], start, end),
+    )
+    return int(row["count"]) if row else 0
+
+
 def next_window_start(campaign: dict[str, Any], at: datetime | None = None) -> datetime:
     tz = campaign_tz(campaign)
     current = (at or now_utc()).astimezone(tz)
@@ -159,6 +178,8 @@ def _usage(conn, campaign: dict[str, Any], now: datetime | None = None) -> list[
 def eligible_mailboxes(conn, campaign: dict[str, Any], at: datetime | None = None) -> list[dict[str, Any]]:
     state = window_state(campaign, at)
     if not state["inside"]:
+        return []
+    if campaign_sent_today(conn, campaign, at) >= int(campaign.get("daily_limit") or 0):
         return []
     candidates = _usage(conn, campaign, at)
     eligible = []
