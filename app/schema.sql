@@ -184,11 +184,13 @@ CREATE TABLE IF NOT EXISTS settings (
 
 CREATE INDEX IF NOT EXISTS idx_leads_campaign_status ON leads(campaign_id, status);
 CREATE INDEX IF NOT EXISTS idx_leads_email ON leads(email);
+CREATE INDEX IF NOT EXISTS idx_leads_email_lower ON leads(lower(email));
 CREATE INDEX IF NOT EXISTS idx_drafts_status ON drafts(status);
 CREATE INDEX IF NOT EXISTS idx_drafts_campaign ON drafts(campaign_id);
 CREATE INDEX IF NOT EXISTS idx_queue_due ON send_queue(status, scheduled_at);
 CREATE INDEX IF NOT EXISTS idx_queue_campaign ON send_queue(campaign_id);
 CREATE INDEX IF NOT EXISTS idx_messages_lead ON messages(lead_id);
+CREATE INDEX IF NOT EXISTS idx_messages_to_email ON messages(lower(to_email));
 CREATE INDEX IF NOT EXISTS idx_messages_mailbox ON messages(mailbox_id, sent_at);
 CREATE INDEX IF NOT EXISTS idx_usage_date ON mailbox_usage_daily(date);
 CREATE INDEX IF NOT EXISTS idx_activity_created ON activity(created_at DESC);
@@ -254,6 +256,8 @@ CREATE INDEX IF NOT EXISTS idx_warmup_profiles_status ON warmup_profiles(status)
 CREATE INDEX IF NOT EXISTS idx_warmup_threads_source ON warmup_threads(source_mailbox_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_warmup_threads_target ON warmup_threads(target_mailbox_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_warmup_messages_mailbox ON warmup_messages(mailbox_id, sent_at);
+CREATE INDEX IF NOT EXISTS idx_warmup_messages_to ON warmup_messages(to_email, sent_at);
+CREATE INDEX IF NOT EXISTS idx_warmup_messages_thread ON warmup_messages(thread_id);
 CREATE INDEX IF NOT EXISTS idx_warmup_queue_due ON warmup_queue(status, scheduled_at);
 
 CREATE TABLE IF NOT EXISTS sheet_sync_state (

@@ -200,8 +200,14 @@ def reserve_slot(conn, campaign: dict[str, Any], mailbox: dict[str, Any], at: da
     if not state["inside"]:
         scheduled = next_window_start(campaign, scheduled)
 
-    gap_min = max(1, int(campaign.get("min_gap_seconds") or 90))
-    gap_max = max(gap_min, int(campaign.get("max_gap_seconds") or gap_min))
+    gap_min = max(
+        1,
+        int(campaign.get("min_gap_seconds") or 90),
+        int(mailbox.get("min_gap_seconds") or 1),
+    )
+    campaign_max = max(gap_min, int(campaign.get("max_gap_seconds") or gap_min))
+    mailbox_max = int(mailbox.get("max_gap_seconds") or 0)
+    gap_max = max(gap_min, min(campaign_max, mailbox_max)) if mailbox_max else campaign_max
     gap = random.randint(gap_min, gap_max)
     conn.execute(
         "UPDATE mailboxes SET next_available_at = ?, updated_at = ? WHERE id = ?",
