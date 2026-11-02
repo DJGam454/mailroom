@@ -235,14 +235,16 @@ activity log for `send_retry` or `send_failed`.
 **SMTP login fails**
 
 Test the mailbox from the inbox page. For Gmail, use an App Password, not the
-normal account password. Port 465 uses SSL; other ports use STARTTLS when the
-server supports it.
+normal account password. Port 465 uses implicit SSL. Other ports use STARTTLS.
+If the server does not support STARTTLS, Mailroom refuses to send the username
+and password over plaintext.
 
 **Apps Script returns an HTML sign-in page**
 
 The deployment is not public or the account is not authorized. Use a web app
-deployment with access to anyone, or use SMTP instead. The existing 4400/4500
-panels had the same failure mode.
+deployment with access to anyone, or use SMTP instead. The Apps Script URL
+must use HTTPS; Mailroom refuses to send the shared secret over plain HTTP. The
+existing 4400/4500 panels had the same failure mode.
 
 **A test domain shows DNS missing**
 
