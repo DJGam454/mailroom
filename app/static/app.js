@@ -901,6 +901,7 @@ function renderApprovalDetail() {
         <div><div class="meta-label">Source</div><div class="meta-value truncate">${esc(item.source || "Local")}</div></div>
         <div><div class="meta-label">Draft age</div><div class="meta-value">${esc(fmtRelative(item.draft_created_at))}</div></div>
       </div>
+      <div class="assignment">${icon("inboxes", 14)} <span>Rotation pool: <strong>${fmtNumber(pool.count)} inboxes</strong> ready${pool.suggested ? ` · suggested <strong>${esc(pool.suggested)}</strong>` : ""}. A mailbox is reserved when you approve.</span></div>
     </div>
 
     <div class="email-shell">
@@ -915,7 +916,6 @@ function renderApprovalDetail() {
         </div>
         <div class="email-body">${esc(item.body)}</div>
       </div>
-      <div class="assignment">${icon("inboxes", 14)} <span>Rotation pool: <strong>${fmtNumber(pool.count)} inboxes</strong> ready${pool.suggested ? ` · suggested <strong>${esc(pool.suggested)}</strong>` : ""}. A mailbox is reserved when you approve.</span></div>
     </div>
 
     <div class="action-bar">
