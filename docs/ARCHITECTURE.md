@@ -79,6 +79,8 @@ pending -> approved -> queued -> sending -> sent
    - approve and queue,
    - deny with a reason,
    - approve or deny several at once.
+   Deny with **Never contact** calls the suppression service, which denies
+   other pending drafts and cancels queued sends for the same address.
 5. Approval calls the rotation service, which reserves a mailbox and a
    scheduled time.
 6. The worker sends only due queue items whose campaign is active.
