@@ -42,7 +42,7 @@ The app has:
 - Daily counters reset on the operator's local date; 00:00-23:59 is a true
   all-day window.
 - Activity log and CSV/JSON import.
-- 56 passing tests and a GitHub Actions workflow.
+- 57 passing tests and a GitHub Actions workflow.
 
 Real lead data is stored only in `data/mailroom.db`, which is gitignored. The
 public repo contains synthetic demo leads only.
