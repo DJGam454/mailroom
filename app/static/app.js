@@ -906,7 +906,7 @@ function renderApprovalDetail() {
     </div>
 
     <div class="action-bar">
-      <div class="hint"><span class="kbd">j</span><span class="kbd">k</span> move <span class="kbd">a</span> approve <span class="kbd">d</span> deny</div>
+      <div class="hint"><span class="kbd">j</span><span class="kbd">k</span> move <span class="kbd">a</span> approve <span class="kbd">d</span> deny <span class="kbd">e</span> edit</div>
       <button class="btn danger" data-action="deny" data-id="${item.draft_id}">${icon("x", 14)} Deny</button>
       <button class="btn" data-action="edit-draft" data-id="${item.draft_id}">${icon("edit", 14)} Edit</button>
       <button class="btn success" data-action="approve" data-id="${item.draft_id}">${icon("check", 14)} Approve & queue</button>
@@ -986,6 +986,7 @@ function openDenyModal(draftId) {
       <form id="modal-form">
         <div class="field"><label for="deny-reason">Reason</label><textarea class="textarea" id="deny-reason" name="reason" placeholder="Why should this not go out?">Not a fit for this campaign</textarea></div>
         <label class="checkline mt-12"><input type="checkbox" name="suppress" /> Never contact this address again</label>
+        <div class="hint mt-8">This also denies other pending drafts and cancels queued sends for the same address.</div>
       </form>
     `,
     footer: `<button class="btn" data-action="close-modal">Cancel</button><button class="btn danger" type="submit" form="modal-form">Deny email</button>`,
@@ -1373,6 +1374,12 @@ async function openLeadModal(id) {
           <div class="mt-16"><div class="email-toolbar"><span class="label">Draft</span><div class="right">${statusChip(draft.status)}</div></div>
           <div class="email-preview"><div class="email-head"><div class="email-subject">${esc(draft.subject)}</div><div class="email-meta"><span>To: ${esc(lead.email)}</span><span>${esc(lead.company || "")}</span></div></div><div class="email-body" style="min-height:150px">${esc(draft.body)}</div></div></div>
         ` : `<div class="notice mt-16">No draft has been generated for this lead yet.</div>`}
+        ${data.message ? `
+          <div class="mt-16"><div class="email-toolbar"><span class="label">Sent message</span><div class="right">${statusChip("sent")}</div></div>
+          <div class="notice green"><strong>${esc(fmtDate(data.message.sent_at))}</strong> from ${esc(data.message.from_email)} via ${esc(data.message.transport)}. Message ID <span class="mono" style="font-size:10.5px">${esc(data.message.message_id || "-")}</span></div></div>
+        ` : data.queue ? `
+          <div class="notice mt-16">${statusChip(data.queue.status)} Scheduled for <strong>${esc(fmtDate(data.queue.scheduled_at))}</strong> via ${esc(data.queue.mailbox_email || "a reserved mailbox")}.</div>
+        ` : ""}
         ${lead.website ? `<div class="mt-12 small muted">${icon("globe", 13)} <a href="${esc(lead.website)}" target="_blank" rel="noreferrer">${esc(lead.website)}</a></div>` : ""}
       `,
       footer: draft && draft.status === "pending"
@@ -1438,7 +1445,7 @@ async function renderSuppression(token) {
           <div class="field"><label for="sup-email">Email</label><input class="input" id="sup-email" name="email" type="email" placeholder="person@example.com" required /></div>
           <div class="field mt-12"><label for="sup-reason">Reason</label><input class="input" id="sup-reason" name="reason" placeholder="Unsubscribed, competitor, do not contact..." /></div>
           <button class="btn primary mt-16" type="submit">${icon("plus", 14)} Add to suppression</button>
-          <div class="notice mt-12">Suppression is permanent until removed here. A denied draft does not automatically suppress the address unless you tick the box in the deny dialog.</div>
+          <div class="notice mt-12">Adding an address here denies its pending drafts and cancels its queued sends immediately. A denied draft only suppresses the address when you tick the box in the deny dialog.</div>
         </form>
       </div>
     </div>
@@ -1447,11 +1454,13 @@ async function renderSuppression(token) {
     event.preventDefault();
     const form = event.currentTarget;
     try {
-      await api("/suppression", {
+      const result = await api("/suppression", {
         method: "POST",
         body: JSON.stringify({ email: form.email.value, reason: form.reason.value }),
       });
-      toast("Address added to suppression.");
+      toast(
+        `Address suppressed. ${result.drafts_denied} draft(s) denied and ${result.queue_cancelled} queued send(s) cancelled.`,
+      );
       renderPage();
     } catch (error) {
       toast(error.message, "error");
@@ -1478,7 +1487,7 @@ async function renderInboxes(token) {
     <div class="grid stat-grid">
       <div class="card stat-card"><div class="stat-label">Domains</div><div class="stat-value">${fmtNumber(state.domains.length)}</div><div class="stat-foot">${state.domains.filter((d) => d.status === "active").length} active</div></div>
       <div class="card stat-card"><div class="stat-label">Mailboxes</div><div class="stat-value">${fmtNumber(state.inboxes.length)}</div><div class="stat-foot">${realCount} real · ${state.inboxes.length - realCount} mock</div></div>
-      <div class="card stat-card"><div class="stat-label">Daily capacity</div><div class="stat-value">${fmtNumber(totalCapacity)}</div><div class="stat-foot">${fmtNumber(sentToday)} sent today</div></div>
+      <div class="card stat-card"><div class="stat-label">Campaign capacity</div><div class="stat-value">${fmtNumber(totalCapacity)}</div><div class="stat-foot">campaign sends across the pool</div></div>
       <div class="card stat-card"><div class="stat-label">Sending today</div><div class="stat-value">${fmtNumber(sentToday + warmupToday)}</div><div class="stat-foot">${fmtNumber(sentToday)} campaign · ${fmtNumber(warmupToday)} warmup</div></div>
     </div>
     <div class="domain-grid grid mt-16">
@@ -1670,7 +1679,7 @@ async function renderDeliverability(token) {
     <div class="grid deliverability-grid mt-16">
       <div class="grid" style="gap:14px">
         <div class="card">
-          <div class="card-head"><div><div class="card-title">Last 7 days</div><div class="card-sub">Accepted sends from the local usage table.</div></div><div class="right"><div class="legend"><span><i></i> Sent</span></div></div></div>
+          <div class="card-head"><div><div class="card-title">Last 7 days</div><div class="card-sub">Campaign sends from the local usage table. Warmup is counted separately.</div></div><div class="right"><div class="legend"><span><i></i> Sent</span></div></div></div>
           <div class="card-body">
             <div class="chart">${daily.map((item) => `<div class="chart-col"><div class="chart-bars"><div class="chart-bar" style="height:${Math.max(2, Math.round((item.sent / maxDaily) * 100))}%"></div></div><div class="chart-label">${esc(item.label)}</div></div>`).join("")}</div>
             <div class="row small muted mt-12"><span>Today: <strong>${fmtNumber(sentToday)}</strong></span><span>Capacity: ${fmtNumber(capacity)}</span><span>Campaign caps below</span></div>
@@ -1743,6 +1752,7 @@ async function renderWarmup(token) {
     <div class="page-head">
       <div><h1 class="page-title">Warmup</h1><div class="page-sub">${esc(PAGES.warmup.sub)}</div></div>
       <div class="page-actions">
+        <span class="chip ${active.length ? "green" : "gray"}" title="Auto-refreshes every 6 seconds"><span class="dot"></span>${active.length ? "Live" : "Off"}</span>
         <button class="btn" data-action="refresh">${icon("refresh", 14)} Refresh</button>
         <button class="btn" data-action="warmup-settings">${icon("settings", 14)} Settings</button>
         <button class="btn" data-action="warmup-tick">${icon("play", 14)} Run tick</button>
@@ -1800,6 +1810,7 @@ async function renderWarmup(token) {
             <div class="divider"></div>
             <div class="cap-row"><div class="main"><div class="name">Reply rate</div><div class="sub">simulated and real replies</div></div><span class="chip green">${Math.round(Number(settings.reply_rate || 0) * 100)}%</span></div>
             <div class="cap-row"><div class="main"><div class="name">Open / read rate</div><div class="sub">best-effort IMAP read flag</div></div><span class="chip blue">${Math.round(Number(settings.open_rate || 0) * 100)}%</span></div>
+            <div class="cap-row"><div class="main"><div class="name">Mark important</div><div class="sub">best-effort IMAP important flag</div></div><span class="chip amber">${Math.round(Number(settings.important_rate || 0) * 100)}%</span></div>
             <div class="cap-row"><div class="main"><div class="name">Pair cooldown</div><div class="sub">same two mailboxes cannot repeat</div></div><span class="chip gray">${fmtNumber(settings.pair_cooldown_days)} days</span></div>
             <div class="cap-row"><div class="main"><div class="name">Window</div><div class="sub">local mailbox timezone</div></div><span class="chip gray">${esc(settings.window_start)}-${esc(settings.window_end)}</span></div>
             <div class="notice mt-12">This is an activity score, not a provider reputation score. Add external seed inboxes and monitor real placement before relying on it.</div>
@@ -2066,8 +2077,9 @@ async function renderQueue(token) {
   $("#page").innerHTML = `
     <div class="page-head">
       <div><h1 class="page-title">Send queue</h1><div class="page-sub">${esc(PAGES.queue.sub)} ${state.campaignId ? `Viewing <strong>${esc(campaignName(state.campaignId))}</strong>.` : ""}</div></div>
-      <div class="page-actions"><button class="btn" data-action="queue-tick">${icon("play", 14)} Run worker</button><button class="btn" data-action="refresh">${icon("refresh", 15)} Refresh</button></div>
+      <div class="page-actions"><span class="chip green" title="Auto-refreshes every 6 seconds"><span class="dot"></span>Live</span><button class="btn" data-action="queue-tick">${icon("play", 14)} Run worker</button><button class="btn" data-action="refresh">${icon("refresh", 15)} Refresh</button></div>
     </div>
+    ${data.sending_paused ? `<div class="notice red" style="margin-bottom:14px"><strong>Sending is paused globally.</strong> The worker will hold these items until you resume in <a href="#/settings" style="text-decoration:underline">Settings</a>.</div>` : ""}
     <div class="grid stat-grid">
       <div class="card stat-card"><div class="stat-label">Queued</div><div class="stat-value">${fmtNumber(counts.queued)}</div><div class="stat-foot">waiting for their slot</div></div>
       <div class="card stat-card"><div class="stat-label">Sending</div><div class="stat-value">${fmtNumber(counts.leased)}</div><div class="stat-foot">leased by the worker</div></div>
@@ -2421,7 +2433,7 @@ document.addEventListener("click", async (event) => {
     const email = target.dataset.email;
     openConfirm(
       "Remove from suppression?",
-      `${email} will be eligible for future campaigns again. The old sends are not deleted.`,
+      `${email} will be eligible for new campaigns again. Existing denied drafts and cancelled sends stay that way.`,
       async () => {
         await api(`/suppression/${encodeURIComponent(email)}`, { method: "DELETE" });
         toast("Address removed from suppression.");
@@ -2545,6 +2557,16 @@ async function init() {
   await refreshApprovalBadge();
   window.addEventListener("hashchange", route);
   await route();
+  setInterval(() => {
+    if (document.visibilityState !== "visible") return;
+    if (!["queue", "warmup"].includes(state.page)) return;
+    if ($("#modal-root")?.children.length) return;
+    if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) return;
+    renderPage().catch(() => {});
+  }, 6000);
+  setInterval(() => {
+    if (document.visibilityState === "visible") refreshApprovalBadge();
+  }, 30000);
 }
 
 init();

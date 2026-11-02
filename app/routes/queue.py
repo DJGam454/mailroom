@@ -64,7 +64,11 @@ def list_queue(
         """,
         count_params,
     )
-    return {"items": items, "counts": counts or {}}
+    return {
+        "items": items,
+        "counts": counts or {},
+        "sending_paused": db.settings_dict(conn).get("sending_paused") == "1",
+    }
 
 
 @router.post("/queue/{queue_id}/send-now")
