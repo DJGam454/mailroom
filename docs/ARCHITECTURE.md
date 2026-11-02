@@ -40,7 +40,12 @@ Core tables:
 | `mailbox_usage_daily` | daily counters for caps and analytics |
 | `suppression` | permanent stop list |
 | `activity` | append-only operator and worker audit |
-| `settings` | app-level transport and agent settings |
+| `settings` | app-level transport, warmup and Sheets settings |
+| `warmup_profiles` | per-mailbox ramp, status, caps and engagement settings |
+| `warmup_threads` | one closed-pool conversation and its selected pair |
+| `warmup_messages` | initial and reply messages, read and reply timestamps |
+| `warmup_queue` | scheduled send, open and reply tasks |
+| `sheet_sync_state` | last local/remote timestamp per synced row |
 
 Lead states:
 
@@ -148,6 +153,68 @@ worker POSTs a JSON body and expects `{ok: true, messageId: "..."}`. A sample
 Apps Script is in `integrations/apps_script/Code.gs`. This is the bridge for
 the user's existing Gmail/Apps Script workflow.
 
+## 6.5 Warmup
+
+Warmup is a separate queue and worker from campaign mail.
+
+Pairing rules:
+
+- source and target must be different mailboxes,
+- they must be on different domains,
+- both warmup profiles must be enabled and ramping or active,
+- the pair cannot repeat within the cooldown window,
+- the target must be under its receive cap,
+- candidates with fewer past interactions are weighted higher.
+
+The ramp is a list in settings. The default starts at 2 sends per mailbox per
+day and rises to 20. Per-mailbox and per-domain caps can lower it. The window
+and weekdays-only flag control timing.
+
+Each thread creates:
+
+1. a send task at a randomized slot,
+2. after a successful send, an open task,
+3. probabilistically, a reply task.
+
+Open tasks update the local read timestamp and make a best-effort IMAP
+`\Seen \Flagged` call when an IMAP profile exists. Reply tasks send a threaded
+reply with `In-Reply-To` and `References`. Warmup mock mail goes to
+`data/warmup_outbox/`, not the campaign outbox.
+
+The health score is an internal activity score:
+
+```text
+20 + min(30, sent_7d * 1.5)
+   + min(25, reply_rate * 25)
+   + min(15, open_rate * 15)
+   + min(10, received_7d * 0.5)
+```
+
+It is not provider reputation or inbox placement. The UI says so.
+
+## 6.6 Google Sheets
+
+The Sheets integration uses a Google service account and four tabs:
+
+- `Mailroom Leads` (two-way)
+- `Mailroom Campaigns` (two-way)
+- `Mailroom Suppression` (union)
+- `Mailroom Warmup` (read-only)
+
+`sheet_sync_state` stores `local_updated_at`, `remote_updated_at`,
+`last_synced_at` and a content hash per row. The hash catches sheet edits made
+without changing the timestamp cell. On pull:
+
+- remote-only change: apply,
+- local-only change: leave for push,
+- both changed: conflict,
+- merge policy: report and abort push,
+- local/remote policy: explicit resolution.
+
+The service account JSON is encrypted with the same local Fernet key as
+mailbox credentials. Sync is manual or CLI-driven in this phase. There is no
+background webhook or Google push notification.
+
 ## 7. Credentials
 
 - Passwords and webhook secrets are encrypted with Fernet.
@@ -203,6 +270,19 @@ POST   /api/queue/{id}/send-now
 POST   /api/queue/{id}/cancel
 POST   /api/queue/tick
 
+GET    /api/warmup
+POST   /api/warmup/start
+POST   /api/warmup/pause
+POST   /api/warmup/resume
+POST   /api/warmup/stop
+POST   /api/warmup/tick
+PATCH  /api/warmup/settings
+
+GET    /api/sheets/status
+POST   /api/sheets/configure
+POST   /api/sheets/test
+POST   /api/sheets/sync
+
 GET    /api/activity
 GET    /api/settings
 PATCH  /api/settings
@@ -232,5 +312,7 @@ PATCH  /api/settings
 - `agent_webhook` setting: POST a lead to an agent and receive subject/body.
 - `campaign_steps` for follow-ups.
 - `messages.direction` for reply ingestion.
-- `mailbox_usage_daily` for warmup and health scoring.
+- `warmup_profiles` for external seed weighting and provider health.
+- `mailbox_usage_daily` for campaign and warmup analytics.
 - `domains` for per-domain reputation.
+- Google Sheets background scheduling via cron or a queue worker.

@@ -219,7 +219,69 @@ panels had the same failure mode.
 `.test` domains have no real DNS. That is expected. Use a real domain for DNS
 checks.
 
-## 10. Scope of this phase
+## 10. Warmup
+
+Open **Warmup**.
+
+This is a closed pool: the same 10 domains and 25 mailboxes exchange mail. It
+is useful for testing and low-level activity, but a diverse external warmup
+network is stronger. Add 2-4 Gmail or Outlook seed inboxes when possible.
+
+The engine:
+
+- only pairs across domains,
+- avoids the same pair for 7 days,
+- ramps 2, 2, 2, 4, 4, 4, 4, 6, 6, 6, 6, 6, 6, 6, 10, 10, 10, 10, 10, 10,
+  10, 15, 15, 15, 15, 15, 15, 15, 15, 15 per mailbox per day,
+- caps at 10 per mailbox and 50 per domain by default,
+- sends short plain-text messages,
+- records opens and replies,
+- writes mock mail to `data/warmup_outbox/`.
+
+Click **Start all** to start the demo. Click **Run tick** to force a scheduling
+and processing pass. **Pause all** stops new sends and keeps history.
+
+For real domains:
+
+1. Verify SPF, DKIM, DMARC and MX.
+2. Use SMTP/IMAP or the Apps Script bridge.
+3. Raise the gap to 5-15 minutes.
+4. Start at 2-5 sends per mailbox per day.
+5. Stagger domains by 7-14 days.
+6. Keep total volume per mailbox under 30 per day.
+7. Keep warmup running after campaigns start.
+
+The health number is an activity score, not provider reputation. See
+[WARMUP.md](WARMUP.md).
+
+## 11. Google Sheets
+
+Open **Google Sheets**.
+
+1. Create a Google Cloud service account.
+2. Enable the Google Sheets API.
+3. Download the JSON key.
+4. Create a sheet and share it with the service account email as Editor.
+5. Paste the spreadsheet ID and JSON into Mailroom.
+6. Save, Test, and Pull.
+
+Tabs:
+
+- `Mailroom Leads` - two-way
+- `Mailroom Campaigns` - two-way
+- `Mailroom Suppression` - union
+- `Mailroom Warmup` - read-only
+
+Conflict policy:
+
+- `merge`: report conflicts and stop the push.
+- `local`: local values win.
+- `remote`: sheet values win.
+
+Use **Dry run** before a large push. The service account JSON is encrypted and
+never returned by the API. See [GOOGLE_SHEETS.md](GOOGLE_SHEETS.md).
+
+## 12. Scope of this phase
 
 Built:
 
@@ -228,6 +290,8 @@ Built:
 - 25-mailbox rotation
 - mock, SMTP and GAS transports
 - queue worker with retries
+- closed-pool warmup with cross-domain pairing and ramp
+- Google Sheets two-way sync with conflicts
 - DNS checks and volume caps
 - activity log
 - CSV/JSON import
@@ -235,9 +299,9 @@ Built:
 
 Not built yet:
 
-- warmup and inbox placement
+- provider-level inbox placement and spam rescue
 - reply ingestion and Unibox
-- Google Sheet two-way sync
+- automatic background Sheets sync
 - open and link tracking
 - multi-step follow-ups UI
 - billing and multi-user accounts

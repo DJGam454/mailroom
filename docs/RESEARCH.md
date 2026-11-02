@@ -202,7 +202,63 @@ mailbox.next_available_at = scheduled_at + random(min_gap, max_gap)
 This gives a coordinated stream instead of a burst. The worker sends only due
 items and re-checks everything before opening a connection.
 
-## 5. What is deliberately not built yet
+## 5. Warmup research
+
+Sources:
+
+- Instantly warmup settings: <https://help.instantly.ai/en/articles/7988514-warmup-settings>
+- Instantly warmup guide: <https://instantly.ai/email-warmup>
+- Warmbly warmup pools: <https://docs.warmbly.com/learn/warmup-pools/>
+- Bounceproof multi-domain ramp: <https://blog.bounceproof.co/advanced-email-warm-up-strategy/>
+- InboxAlly peer-to-peer risks: <https://www.inboxally.com/blog/peer-to-peer-email-warmup>
+- Warmy warmup at scale: <https://www.warmy.io/blog/how-to-warmup-inboxes-at-scale/>
+
+The key conclusions:
+
+1. A closed pool of your own domains works mechanically, but it is weaker than
+   a diverse external pool. It can still provide baseline activity.
+2. Stagger new domains. Starting 10 domains on the same day creates a visible
+   pattern.
+3. Keep volume low and ramp slowly. A common shape is 5-20 per mailbox per day
+   in the first weeks, then toward 30. Mailroom starts at 2 and caps at 20 by
+   default.
+4. Keep the same pair from repeating. Warmbly recommends a recent-partner gap
+   of 7 days or more.
+5. Use varied content. Do not send identical copy from every new domain.
+6. Engagement should include opens, replies and read flags, not only sends.
+7. Add external seed inboxes where possible. Gmail, Outlook and other providers
+   give the receiving side a more realistic network.
+8. Warmup is not a substitute for inbox placement testing, bounce monitoring
+   and complaint monitoring.
+9. Each warmup send consumes the same provider quota as campaign mail. Keep the
+   combined volume under the provider limit.
+10. Warmup should continue after campaigns start; it is not only a one-time
+    ramp.
+
+Mailroom implements the mechanics and the guardrails. It does not claim that a
+closed pool is full reputation. The Warmup page and `docs/WARMUP.md` say this.
+
+## 6. Google Sheets research
+
+The existing projects already use Google Sheets as the source of truth. That
+made Sheets the natural bridge instead of inventing a new export.
+
+Two implementation options were considered:
+
+1. Apps Script webhook per mailbox. Good for Gmail sending, poor for a
+   structured two-way data sync because every read/write is a custom API.
+2. Google Sheets API with a service account. Better for two-way sync because
+   ranges, tabs, batching and conflict detection are first-class.
+
+Mailroom uses the second option for data and keeps the Apps Script bridge only
+for the `gas` sending transport. The sync is manual or CLI-driven in this
+phase, which avoids a background job unexpectedly overwriting the sheet.
+
+Conflict detection is timestamp-based per row. This is simpler than cell-level
+diffs and safer than last-write-wins for a human-edited sheet. The merge policy
+reports conflicts and aborts the push; local and remote policies are explicit.
+
+## 7. What is deliberately not built yet
 
 - Google Sheet two-way sync.
 - Mailbox warmup and inbox placement.

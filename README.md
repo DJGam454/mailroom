@@ -25,10 +25,14 @@ Script mailbox and one Google Sheet. This project is the next layer:
 - approval before send,
 - mailbox rotation with daily and hourly caps,
 - a coordinated queue instead of a burst,
+- closed-pool warmup with cross-domain pairing and a slow ramp,
+- two-way Google Sheets sync for leads and campaigns,
 - mock, SMTP and Google Apps Script transports.
 
 See [docs/RESEARCH.md](docs/RESEARCH.md) for the Instantly feature research and
-the findings from the existing Apps Script projects.
+the findings from the existing Apps Script projects. Warmup details are in
+[docs/WARMUP.md](docs/WARMUP.md) and Sheets setup is in
+[docs/GOOGLE_SHEETS.md](docs/GOOGLE_SHEETS.md).
 
 ## Quick start
 
@@ -194,6 +198,41 @@ This phase reports volume, caps and DNS state. It does not score reputation.
 - DNS pass, missing or unknown for MX, SPF, DKIM and DMARC
 - last seven days of sends
 
+## Warmup
+
+Warmup is a separate engine, not campaign mail.
+
+- Cross-domain pairs only.
+- 7-day pair cooldown.
+- Slow ramp from 2 to 20 sends per mailbox per day.
+- Per-mailbox and per-domain caps.
+- Optional weekdays and send window.
+- Plain-text conversations with opens and replies.
+- Separate `data/warmup_outbox/` for mock mail.
+- Best-effort IMAP read flags when an IMAP profile exists.
+
+Your 10 domains and 25 mailboxes can warm each other, but that is a closed
+pool. Add 2-4 external seed inboxes from Gmail or Outlook for a stronger
+network. Full details: [docs/WARMUP.md](docs/WARMUP.md).
+
+## Google Sheets two-way sync
+
+Open **Google Sheets** to connect a service account.
+
+Tabs:
+
+- `Mailroom Leads` - two-way
+- `Mailroom Campaigns` - two-way
+- `Mailroom Suppression` - union
+- `Mailroom Warmup` - read-only snapshot
+
+Sync keeps per-row timestamps plus a content hash, so a normal sheet edit is
+detected even when the timestamp cell is not updated. Conflicts are reported
+instead of silently overwriting edits. Pull, push, two-way and dry run are available. Lead status is
+app-controlled so a sheet edit cannot bypass approval.
+
+Full details: [docs/GOOGLE_SHEETS.md](docs/GOOGLE_SHEETS.md).
+
 ## Operator pages
 
 | Page | Purpose |
@@ -204,8 +243,10 @@ This phase reports volume, caps and DNS state. It does not score reputation.
 | Leads | the single sheet: search, filter, import, export |
 | Inboxes & domains | connections, caps and DNS checks |
 | Deliverability | volume and DNS state |
+| Warmup | closed-pool ramp, pairs, health and engagement |
 | Send queue | scheduled sends, mailbox, retry state |
 | Activity | append-only audit trail |
+| Google Sheets | service account, tabs, pull/push/sync and conflicts |
 | Settings | sender identity, safety switches, agent hook |
 
 ## Safety
@@ -232,16 +273,19 @@ app/
   seed.py              synthetic demo data
   crypto.py            local credential encryption
   routes/              JSON API
-  services/            drafting, rotation, sender, worker, DNS, importer
+  services/            drafting, rotation, sender, worker, warmup, sheets, DNS, importer
   static/              zero-build operator UI
 scripts/
   import_icp.py        import a real ICPExtractor pack locally
-tests/                 13 backend tests
+  sync_sheets.py       command-line Sheets sync
+tests/                 23 backend tests
 integrations/
   apps_script/         optional Gmail bridge
 docs/
   RESEARCH.md          Instantly and existing-project research
   ARCHITECTURE.md      data model, rotation, queue, transports
+  WARMUP.md            closed-pool algorithm and research
+  GOOGLE_SHEETS.md     service account and conflict model
   OPERATIONS.md        runbook
   OVERNIGHT_REPORT.md  morning summary
 ```
@@ -252,8 +296,9 @@ docs/
 make check
 ```
 
-This compiles the Python, checks the JavaScript syntax and runs the pytest
-suite. GitHub Actions runs the same checks on every push and pull request.
+This compiles the Python, checks the JavaScript syntax and runs the 23-test
+pytest suite. GitHub Actions runs the same checks on every push and pull
+request.
 
 ## API
 
@@ -272,6 +317,16 @@ GET  /api/domains
 GET  /api/deliverability
 GET  /api/queue
 POST /api/queue/tick
+GET  /api/warmup
+POST /api/warmup/start
+POST /api/warmup/pause
+POST /api/warmup/resume
+POST /api/warmup/tick
+PATCH /api/warmup/settings
+GET  /api/sheets/status
+POST /api/sheets/configure
+POST /api/sheets/test
+POST /api/sheets/sync
 GET  /api/activity
 GET  /api/settings
 ```
@@ -288,14 +343,16 @@ Built in this phase:
 - coordinated send queue and worker
 - mock, SMTP and Apps Script transports
 - DNS checks and volume reporting
+- closed-pool warmup with a cross-domain algorithm
+- Google Sheets two-way sync with conflict detection
 - ICPExtractor import
 - tests and CI
 
 Deferred:
 
-- warmup and inbox placement
+- inbox placement testing and provider-level spam rescue
 - reply ingestion and Unibox
-- Google Sheet two-way sync
+- automatic background Sheets sync
 - open and link tracking
 - follow-up sequence editor UI
 - teams, billing and multi-user auth
