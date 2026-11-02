@@ -150,7 +150,7 @@ python3 scripts/import_icp.py \
 ```
 
 The importer creates the campaign if needed, assigns every mailbox, renders a
-first draft for each new lead and is idempotent by email within a campaign.
+first draft for each new lead and is idempotent by email within a campaign. Rows without a valid email are skipped.
 
 The default demo schedule is all day, every day. For a real campaign, use
 office hours and a weekday schedule and keep volume low.
@@ -288,7 +288,7 @@ app/
 scripts/
   import_icp.py        import a real ICPExtractor pack locally
   sync_sheets.py       command-line Sheets sync
-tests/                 52 backend tests
+tests/                 53 backend tests
 integrations/
   apps_script/         optional Gmail bridge
 docs/
@@ -306,7 +306,7 @@ docs/
 make check
 ```
 
-This compiles the Python, checks the JavaScript syntax and runs the 52-test
+This compiles the Python, checks the JavaScript syntax and runs the 53-test
 pytest suite. GitHub Actions runs the same checks on every push and pull
 request.
 
