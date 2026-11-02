@@ -285,8 +285,16 @@ def _create_thread(conn, source: dict[str, Any], target: dict[str, Any], setting
         (source["id"], target["id"], subject, body, now, now),
     )
     thread_id = int(cursor.lastrowid)
+    last = db.one(
+        conn,
+        "SELECT MAX(scheduled_at) AS at FROM warmup_queue "
+        "WHERE mailbox_id = ? AND kind = 'send' AND status IN ('queued', 'leased')",
+        (source["id"],),
+    )
+    base = rotation.parse_dt(last.get("at")) if last and last.get("at") else rotation.now_utc()
+    base = max(base, rotation.now_utc())
     delay = random.randint(settings["min_gap"], max(settings["min_gap"], settings["max_gap"]))
-    scheduled = rotation.iso(rotation.now_utc() + timedelta(seconds=delay))
+    scheduled = rotation.iso(base + timedelta(seconds=delay))
     conn.execute(
         "INSERT INTO warmup_queue(thread_id, mailbox_id, kind, scheduled_at, status, created_at, updated_at) "
         "VALUES (?, ?, 'send', ?, 'queued', ?, ?)",
@@ -726,7 +734,7 @@ def status(conn) -> dict[str, Any]:
           (SELECT COUNT(*) FROM warmup_messages WHERE kind = 'initial' AND read_at IS NOT NULL AND date(sent_at) = date('now')) AS opened_today
         """,
     ) or {}
-    average_health = round(sum(profile["health"] for profile in profiles) / len(profiles)) if profiles else 0
+    average_health = round(sum(profile["health"] for profile in active) / len(active)) if active else 0
     return {
         "settings": settings,
         "profiles": profiles,
