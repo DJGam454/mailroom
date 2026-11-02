@@ -18,11 +18,8 @@ def campaign_with_counts(conn, campaign_id: int) -> dict[str, Any] | None:
                (SELECT COUNT(*) FROM drafts d WHERE d.campaign_id = c.id AND d.status = 'sent') AS sent_count,
                (SELECT COUNT(*) FROM send_queue q WHERE q.campaign_id = c.id AND q.status IN ('queued', 'leased')) AS queued_count,
                (SELECT COUNT(DISTINCT cm.mailbox_id) FROM campaign_mailboxes cm WHERE cm.campaign_id = c.id AND cm.enabled = 1) AS mailbox_count,
-               (SELECT COALESCE(SUM(u.sent), 0)
-                  FROM mailbox_usage_daily u
-                  JOIN mailboxes m ON m.id = u.mailbox_id
-                  JOIN campaign_mailboxes cm2 ON cm2.mailbox_id = m.id
-                 WHERE cm2.campaign_id = c.id AND u.date = date('now')) AS sent_today
+               (SELECT COUNT(*) FROM messages msg
+                 WHERE msg.campaign_id = c.id AND date(msg.sent_at) = date('now')) AS sent_today
         FROM campaigns c
         WHERE c.id = ?
         """,

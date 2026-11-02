@@ -47,14 +47,11 @@ def deliverability(conn=Conn) -> dict[str, Any]:
         conn,
         """
         SELECT c.id, c.name, c.daily_limit, c.per_domain_limit, c.status,
-               COALESCE(SUM(u.sent), 0) AS sent_today,
+               (SELECT COUNT(*) FROM messages msg
+                 WHERE msg.campaign_id = c.id AND date(msg.sent_at) = date('now')) AS sent_today,
                (SELECT COUNT(*) FROM leads l WHERE l.campaign_id = c.id AND l.status = 'sent') AS total_sent,
                (SELECT COUNT(*) FROM leads l WHERE l.campaign_id = c.id) AS total_leads
         FROM campaigns c
-        LEFT JOIN campaign_mailboxes cm ON cm.campaign_id = c.id
-        LEFT JOIN mailboxes m ON m.id = cm.mailbox_id
-        LEFT JOIN mailbox_usage_daily u ON u.mailbox_id = m.id AND u.date = date('now')
-        GROUP BY c.id
         ORDER BY c.id DESC
         """,
     )
