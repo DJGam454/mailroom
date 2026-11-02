@@ -1832,13 +1832,14 @@ async function renderWarmup(token) {
   const active = profiles.filter((profile) => profile.enabled && ["ramping", "active"].includes(profile.status));
   const pairs = data.pair_preview || [];
   const recent = data.recent || [];
+  const dailyLimit = Number(settings.daily_limit || 10);
   const phases = [
-    ["Days 1-3", settings.ramp?.[0] || 2],
-    ["Days 4-7", settings.ramp?.[3] || 4],
-    ["Days 8-14", settings.ramp?.[7] || 6],
-    ["Days 15-21", settings.ramp?.[14] || 10],
-    ["Days 22-30", settings.ramp?.[21] || 15],
-    ["Day 31+", settings.ramp?.[29] || 20],
+    ["Days 1-3", Math.min(dailyLimit, settings.ramp?.[0] || 2)],
+    ["Days 4-7", Math.min(dailyLimit, settings.ramp?.[3] || 4)],
+    ["Days 8-14", Math.min(dailyLimit, settings.ramp?.[7] || 6)],
+    ["Days 15-21", Math.min(dailyLimit, settings.ramp?.[14] || 10)],
+    ["Days 22-30", Math.min(dailyLimit, settings.ramp?.[21] || 15)],
+    ["Day 31+", Math.min(dailyLimit, settings.ramp?.[29] || 20)],
   ];
   $("#page").innerHTML = `
     <div class="page-head">
@@ -1899,6 +1900,7 @@ async function renderWarmup(token) {
             <div class="form-grid" style="gap:8px">
               ${phases.map(([label, value]) => `<div class="cap-row"><div class="main"><div class="name">${esc(label)}</div><div class="sub">warmup sends per mailbox</div></div><span class="chip gray">${fmtNumber(value)}/day</span></div>`).join("")}
             </div>
+            <div class="cap-row"><div class="main"><div class="name">Per-mailbox cap</div><div class="sub">the ramp never exceeds this</div></div><span class="chip gray">${fmtNumber(dailyLimit)}/day</span></div>
             <div class="divider"></div>
             <div class="cap-row"><div class="main"><div class="name">Reply rate</div><div class="sub">simulated and real replies</div></div><span class="chip green">${Math.round(Number(settings.reply_rate || 0) * 100)}%</span></div>
             <div class="cap-row"><div class="main"><div class="name">Open / read rate</div><div class="sub">best-effort IMAP read flag</div></div><span class="chip blue">${Math.round(Number(settings.open_rate || 0) * 100)}%</span></div>

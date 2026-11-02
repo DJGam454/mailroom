@@ -272,8 +272,8 @@ The engine:
 
 - only pairs across domains,
 - avoids the same pair for 7 days,
-- ramps 2, 2, 2, 4, 4, 4, 4, 6, 6, 6, 6, 6, 6, 6, 10, 10, 10, 10, 10, 10,
-  10, 15, 15, 15, 15, 15, 15, 15, 15, 15 per mailbox per day,
+- ramps 2, 4, 6, 10, 15, 20 per mailbox per day across the phases,
+- the default per-mailbox cap of 10 trims the later ramp until you raise it,
 - caps at 10 per mailbox and 50 per domain by default,
 - sends short plain-text messages,
 - records opens and replies,
