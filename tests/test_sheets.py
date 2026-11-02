@@ -86,6 +86,24 @@ def test_write_tab_preserves_helper_columns():
     assert worksheet.values[1][1] == "updated"
 
 
+def test_write_tab_clears_stale_rows():
+    worksheet = FakeWorksheet()
+    headers = sheets.HEADERS["suppression"]
+    sheets.write_tab(
+        worksheet,
+        headers,
+        [
+            ["a@example.test", "one", "2026-11-02T00:00:00Z"],
+            ["b@example.test", "two", "2026-11-02T00:00:00Z"],
+            ["c@example.test", "three", "2026-11-02T00:00:00Z"],
+        ],
+    )
+    sheets.write_tab(worksheet, headers, [["a@example.test", "one", "2026-11-02T00:00:00Z"]])
+    assert worksheet.values[1][0] == "a@example.test"
+    assert worksheet.values[2][0] == ""
+    assert worksheet.values[3][0] == ""
+
+
 def test_normalize_spreadsheet_id():
     assert sheets._normalize_spreadsheet_id(" abc123 ") == "abc123"
     assert (
@@ -217,6 +235,28 @@ def test_invalid_sheet_edits_are_reported(seeded):
     result = sheets.apply_remote_campaigns(seeded, [bad_campaign], policy="merge")
     assert result["errors"]
     assert result["updated"] == 0
+
+
+def test_suppression_pull_stops_pending_work(seeded):
+    from app.services import approvals
+
+    draft = db.one(
+        seeded,
+        "SELECT d.*, l.email FROM drafts d JOIN leads l ON l.id = d.lead_id "
+        "WHERE d.status = 'pending' ORDER BY d.id LIMIT 1",
+    )
+    assert draft
+    with db.transaction() as conn:
+        approvals.approve_draft(conn, draft["id"])
+    result = sheets.apply_remote_suppression(
+        seeded,
+        [{"Email": draft["email"], "Reason": "sheet unsubscribe"}],
+    )
+    assert result["inserted"] == 1
+    updated_draft = db.one(seeded, "SELECT status FROM drafts WHERE id = ?", (draft["id"],))
+    queue = db.one(seeded, "SELECT status FROM send_queue WHERE draft_id = ?", (draft["id"],))
+    assert updated_draft["status"] == "denied"
+    assert queue["status"] == "cancelled"
 
 
 def test_suppression_pull(seeded):

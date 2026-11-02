@@ -248,6 +248,7 @@ def test_global_pause_blocks_approval(seeded):
         saved = client.patch("/api/settings", json={"values": {"sending_paused": "1"}})
         assert saved.status_code == 200
         assert saved.json()["values"]["sending_paused"] == "1"
+        assert not any(key.endswith("_enc") for key in saved.json()["values"])
         assert client.get("/api/overview").json()["stats"]["sending_paused"] is True
         pending = client.get("/api/approvals?page_size=1").json()
         response = client.post(f"/api/approvals/{pending['items'][0]['draft_id']}/approve", json={})
@@ -286,6 +287,7 @@ def test_campaign_and_leads_api(seeded):
         assert client.get("/api/sheets/status").status_code == 200
         settings = client.get("/api/settings").json()["values"]
         assert settings["sender_name"]
+        assert not any(key.endswith("_enc") for key in settings)
 
 
 def test_suppression_api(seeded):

@@ -27,7 +27,12 @@ ALLOWED = {
 
 @router.get("/settings")
 def get_settings(conn=Conn) -> dict[str, Any]:
-    return {"values": db.settings_dict(conn)}
+    values = {
+        key: value
+        for key, value in db.settings_dict(conn).items()
+        if not key.endswith("_enc")
+    }
+    return {"values": values}
 
 
 @router.patch("/settings")
@@ -38,5 +43,14 @@ def update_settings(payload: SettingsUpdate, conn=Conn) -> dict[str, Any]:
     with conn:
         for key, value in payload.values.items():
             db.set_setting(conn, key, str(value))
-        db.audit(conn, "settings_updated", "settings", "", payload.values)
-    return {"ok": True, "values": db.settings_dict(conn)}
+        audited = {
+            key: ("***" if key == "agent_webhook" else value)
+            for key, value in payload.values.items()
+        }
+        db.audit(conn, "settings_updated", "settings", "", audited)
+    values = {
+        key: value
+        for key, value in db.settings_dict(conn).items()
+        if not key.endswith("_enc")
+    }
+    return {"ok": True, "values": values}

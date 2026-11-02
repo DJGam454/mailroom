@@ -26,7 +26,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from app import crypto, db
-from app.services import drafting, warmup
+from app.services import drafting, suppression as suppression_service, warmup
 
 SHEET_TABS = {
     "leads": "Mailroom Leads",
@@ -253,9 +253,9 @@ def _extra_columns(
     if key_name not in existing[0]:
         return {}, 0, []
     extra_header = [str(value or "") for value in existing[0][len(headers):]]
-    width = len(extra_header)
     key_index = existing[0].index(key_name)
     extras: dict[str, list[str]] = {}
+    width = len(extra_header)
     for row in existing[1:]:
         if len(row) <= len(headers) or key_index >= len(row):
             continue
@@ -263,6 +263,8 @@ def _extra_columns(
         if not key:
             continue
         extras[key] = [str(value or "") for value in row[len(headers):]]
+        width = max(width, len(extras[key]))
+    extra_header.extend([""] * (width - len(extra_header)))
     return extras, width, extra_header
 
 
@@ -657,10 +659,7 @@ def apply_remote_suppression(conn, remote_rows: list[dict[str, str]], dry_run: b
             continue
         inserted += 1
         if not dry_run:
-            conn.execute(
-                "INSERT OR IGNORE INTO suppression(email, reason, created_at) VALUES (?, ?, ?)",
-                (email, (remote.get("Reason") or "Google Sheet").strip(), (remote.get("Created At") or _now()).strip()),
-            )
+            suppression_service.add(conn, email, (remote.get("Reason") or "Google Sheet").strip())
     return {"inserted": inserted}
 
 
@@ -820,6 +819,8 @@ def sync(conn, direction: str = "both", dry_run: bool = False) -> dict[str, Any]
             result["aborted_push"] = "Resolve conflicts first, or set the policy to local or remote."
             return result
         result["pushed"] = _push(conn, worksheets, dry_run)
+    if result["errors"]:
+        result["ok"] = False
     if not dry_run:
         db.set_setting(conn, "google_sheets_last_sync_at", _now())
         result["last_sync_at"] = _now()
