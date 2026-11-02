@@ -74,7 +74,7 @@ public repo contains synthetic demo leads only.
 ```sh
 cd mailroom
 source .venv/bin/activate
-uvicorn app.main:app --host 127.0.0.1 --port 4600 --reload
+python scripts/serve.py
 ```
 
 Then open <http://127.0.0.1:4600>.

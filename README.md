@@ -44,10 +44,12 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 python3 -m app.seed
-uvicorn app.main:app --host 127.0.0.1 --port 4600 --reload
+python scripts/serve.py
 ```
 
-Open <http://127.0.0.1:4600>. Requires Python 3.12 or newer.
+Open <http://127.0.0.1:4600>. Requires Python 3.12 or newer. Copy
+`.env.example` to `.env` for local overrides such as the port, database path,
+worker flags or encryption key.
 
 The seed is only applied when the campaign table is empty. Set
 `MAILROOM_AUTO_SEED=0` to disable it after the first run.
@@ -296,6 +298,7 @@ app/
   services/            drafting, rotation, sender, worker, warmup, sheets, suppression, DNS, importer
   static/              zero-build operator UI
 scripts/
+  serve.py             start with host/port from .env
   import_icp.py        import a real ICPExtractor pack locally
   sync_sheets.py       command-line Sheets sync
 tests/                 59 backend tests

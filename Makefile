@@ -8,7 +8,7 @@ seed:
 	.venv/bin/python -m app.seed
 
 run:
-	.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 4600 --reload
+	.venv/bin/python scripts/serve.py
 
 test:
 	.venv/bin/python -m pytest -q

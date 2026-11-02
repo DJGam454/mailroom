@@ -8,10 +8,11 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 python3 -m app.seed          # synthetic demo only
-uvicorn app.main:app --host 127.0.0.1 --port 4600 --reload
+python scripts/serve.py
 ```
 
-Open <http://127.0.0.1:4600>. The app binds to localhost only.
+Open <http://127.0.0.1:4600>. The app binds to localhost by default. The
+`scripts/serve.py` wrapper reads the host and port from `.env`.
 
 The first start without a database seeds synthetic demo data: 10 `.test`
 domains, 25 mock inboxes, two campaigns and 34 leads. There are no real
