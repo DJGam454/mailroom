@@ -3,7 +3,7 @@
 ## 1. Start the app
 
 ```sh
-cd /Users/divyantiwari/github/DJGam454/mailroom
+cd mailroom
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -26,7 +26,7 @@ Main A/B pool:
 
 ```sh
 python3 scripts/import_icp.py \
-  --json /Users/divyantiwari/ICPExtractor/output/leads.json \
+  --json ~/ICPExtractor/output/leads.json \
   --campaign "NCR SME - Nov 2026" \
   --grades A,B
 ```
@@ -35,7 +35,7 @@ Main freemail pool:
 
 ```sh
 python3 scripts/import_icp.py \
-  --json /Users/divyantiwari/ICPExtractor/output/leads.json \
+  --json ~/ICPExtractor/output/leads.json \
   --campaign "NCR Freemail - Nov 2026" \
   --grades C
 ```
@@ -44,11 +44,11 @@ Healthcare A/B and freemail:
 
 ```sh
 python3 scripts/import_icp.py \
-  --csv /Users/divyantiwari/ICPExtractor/output/healthcare_sheet_ready.csv \
+  --csv ~/ICPExtractor/output/healthcare_sheet_ready.csv \
   --campaign "NCR Healthcare - Nov 2026"
 
 python3 scripts/import_icp.py \
-  --csv /Users/divyantiwari/ICPExtractor/output/healthcare_sheet_ready_freemail.csv \
+  --csv ~/ICPExtractor/output/healthcare_sheet_ready_freemail.csv \
   --campaign "NCR Healthcare Freemail - Nov 2026"
 ```
 

@@ -53,6 +53,11 @@ changes.
 Writes the current local rows to the sheet. This is the operation that creates
 or refreshes the tabs.
 
+Helper columns to the right of Mailroom's columns are preserved and matched by
+the first column key (`ID`, `Email` or `Mailbox`). Do not insert a column
+inside the Mailroom range: that shifts the schema. Add notes and helper columns
+to the right of it.
+
 ### Two-way
 
 Pull first. If there are conflicts and the policy is `merge`, the push is
@@ -101,7 +106,6 @@ Campaigns:
 
 - name
 - status
-- approval mode
 - daily limit
 - per-domain limit
 - timezone
@@ -117,8 +121,9 @@ Warmup:
 
 - read-only snapshot. It is written by Mailroom and ignored on pull.
 
-Lead status is intentionally app-controlled. This prevents a sheet edit from
-bypassing the approval gate. Use **Approvals** for approve or deny.
+Lead status and campaign approval mode are intentionally app-controlled. This
+prevents a sheet edit from bypassing the human approval gate. Use **Approvals**
+for approve or deny.
 
 ## 7. Command line
 

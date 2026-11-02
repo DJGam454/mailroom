@@ -37,7 +37,8 @@ the findings from the existing Apps Script projects. Warmup details are in
 ## Quick start
 
 ```sh
-cd /Users/divyantiwari/github/DJGam454/mailroom
+git clone https://github.com/DJGam454/mailroom.git
+cd mailroom
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -124,7 +125,7 @@ Main A/B pool:
 
 ```sh
 python3 scripts/import_icp.py \
-  --json /Users/divyantiwari/ICPExtractor/output/leads.json \
+  --json ~/ICPExtractor/output/leads.json \
   --campaign "NCR SME - Nov 2026" --grades A,B
 ```
 
@@ -132,7 +133,7 @@ Freemail pool:
 
 ```sh
 python3 scripts/import_icp.py \
-  --json /Users/divyantiwari/ICPExtractor/output/leads.json \
+  --json ~/ICPExtractor/output/leads.json \
   --campaign "NCR Freemail - Nov 2026" --grades C
 ```
 
@@ -140,11 +141,11 @@ Healthcare:
 
 ```sh
 python3 scripts/import_icp.py \
-  --csv /Users/divyantiwari/ICPExtractor/output/healthcare_sheet_ready.csv \
+  --csv ~/ICPExtractor/output/healthcare_sheet_ready.csv \
   --campaign "NCR Healthcare - Nov 2026"
 
 python3 scripts/import_icp.py \
-  --csv /Users/divyantiwari/ICPExtractor/output/healthcare_sheet_ready_freemail.csv \
+  --csv ~/ICPExtractor/output/healthcare_sheet_ready_freemail.csv \
   --campaign "NCR Healthcare Freemail - Nov 2026"
 ```
 
@@ -286,7 +287,7 @@ app/
 scripts/
   import_icp.py        import a real ICPExtractor pack locally
   sync_sheets.py       command-line Sheets sync
-tests/                 31 backend tests
+tests/                 35 backend tests
 integrations/
   apps_script/         optional Gmail bridge
 docs/
@@ -304,7 +305,7 @@ docs/
 make check
 ```
 
-This compiles the Python, checks the JavaScript syntax and runs the 31-test
+This compiles the Python, checks the JavaScript syntax and runs the 35-test
 pytest suite. GitHub Actions runs the same checks on every push and pull
 request.
 

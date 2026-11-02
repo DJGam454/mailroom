@@ -47,7 +47,7 @@ review-before-send step.
 
 ### 2.1 ICPExtractor
 
-Location: `/Users/divyantiwari/ICPExtractor`
+Location: a sibling `ICPExtractor` checkout
 
 The output pack is high quality and already contains the fields an approval
 screen needs:
@@ -75,8 +75,8 @@ hardcoding a vertical.
 
 ### 2.2 4400 and 4500 panels
 
-Location: `/Users/divyantiwari/Desktop/EmailAutomation_Doctors/app` and the
-India/Dubai copies.
+Location: a local `EmailAutomation_Doctors` checkout and the India/Dubai
+copies.
 
 Both are zero-dependency Node HTTP servers. They serve a static panel and proxy
 JSON calls to an Apps Script web app with a shared secret in
@@ -92,12 +92,9 @@ limits for the new system:
 
 ### 2.3 Apps Script code
 
-Locations:
-
-- `/Users/divyantiwari/Desktop/Email_Automation_Sudipti`
-- `/Users/divyantiwari/Desktop/EmailAutomation_Doctors`
-- `/Users/divyantiwari/Desktop/India-Outreach-ai`
-- `/Users/divyantiwari/Desktop/Dubai-Outreach-ai`
+Locations: the local `Email_Automation_Sudipti`, `EmailAutomation_Doctors`,
+`India-Outreach-ai` and `Dubai-Outreach-ai` projects. They are source material,
+not part of this repository.
 
 Reusable ideas:
 

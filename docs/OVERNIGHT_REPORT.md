@@ -38,7 +38,7 @@ The app has:
   approval path.
 - Combined campaign plus warmup volume on the inbox and deliverability pages.
 - Activity log and CSV/JSON import.
-- 31 passing tests and a GitHub Actions workflow.
+- 35 passing tests and a GitHub Actions workflow.
 
 Real lead data is stored only in `data/mailroom.db`, which is gitignored. The
 public repo contains synthetic demo leads only.
@@ -66,7 +66,7 @@ public repo contains synthetic demo leads only.
 ## How to use it in the morning
 
 ```sh
-cd /Users/divyantiwari/github/DJGam454/mailroom
+cd mailroom
 source .venv/bin/activate
 uvicorn app.main:app --host 127.0.0.1 --port 4600 --reload
 ```
