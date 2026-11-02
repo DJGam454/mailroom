@@ -136,8 +136,9 @@ lower of their maximums. That lets a mailbox enforce a conservative floor even
 when a campaign is configured more loosely.
 
 At send time it re-checks campaign status, mailbox status, domain status,
-suppression, repeat contact, the window, daily limits and hourly limits. A
-paused mailbox cannot send a stale approval.
+suppression, repeat contact, the window, the campaign total for its local day,
+mailbox daily and hourly limits and the per-domain limit. A paused mailbox or a
+campaign that already hit its daily cap cannot send a stale approval.
 
 **Inboxes & domains** shows campaign and warmup volume together. The campaign
 cap and the warmup cap are separate counters, but both consume the provider's

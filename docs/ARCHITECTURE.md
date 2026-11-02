@@ -101,6 +101,7 @@ Eligibility:
 - `mailbox_usage_daily.sent < mailbox.daily_limit`
 - sends in the last hour `< mailbox.hourly_limit`
 - domain sends today `< campaign.per_domain_limit`
+- campaign sends today `< campaign.daily_limit` (campaign timezone)
 - campaign is active and inside its window
 - global sending is not paused
 - the recipient has no prior Mailroom send and no other queued send
