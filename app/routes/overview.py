@@ -15,6 +15,7 @@ router = APIRouter(prefix="/api", tags=["overview"])
 
 @router.get("/overview")
 def overview(conn=Conn) -> dict[str, Any]:
+    app_settings = db.settings_dict(conn)
     stats = db.one(
         conn,
         """
@@ -34,6 +35,10 @@ def overview(conn=Conn) -> dict[str, Any]:
           (SELECT COUNT(*) FROM warmup_messages WHERE kind = 'reply' AND date(sent_at) = date('now')) AS warmup_replies_today
         """,
     ) or {}
+    stats["sheets_configured"] = bool(
+        app_settings.get("google_sheets_spreadsheet_id")
+        and app_settings.get("google_sheets_credentials_enc")
+    )
 
     campaign_ids = db.rows(conn, "SELECT id FROM campaigns ORDER BY id DESC")
     campaigns = [campaign_with_counts(conn, row["id"]) for row in campaign_ids]

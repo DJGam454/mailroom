@@ -714,6 +714,15 @@ async function renderOverview(token) {
           </div>
         </div>
 
+        <div class="card">
+          <div class="card-head"><div><div class="card-title">Next steps</div><div class="card-sub">The shortest path through the control room.</div></div></div>
+          <div class="card-body flush" style="padding:4px 17px 10px">
+            <a class="cap-row" href="#/approvals"><div class="main"><div class="name">Review approvals</div><div class="sub">${fmtNumber(stats.pending_count)} waiting for a decision</div></div>${icon("arrow", 13)}</a>
+            <a class="cap-row" href="#/warmup"><div class="main"><div class="name">${stats.warmup_active ? "Check warmup" : "Start warmup"}</div><div class="sub">${stats.warmup_active ? `${fmtNumber(stats.warmup_active)} profiles active` : "25 mailboxes ready in the mock pool"}</div></div>${icon("arrow", 13)}</a>
+            <a class="cap-row" href="#/sheets"><div class="main"><div class="name">${stats.sheets_configured ? "Open Google Sheets" : "Connect Google Sheets"}</div><div class="sub">${stats.sheets_configured ? "Two-way sync is configured" : "Two-way leads and campaigns"}</div></div>${icon("arrow", 13)}</a>
+          </div>
+        </div>
+
         <div class="card card-body">
           <div class="row"><div class="stat-icon violet" style="position:static;margin:0">${icon("zap", 15)}</div><div><div class="card-title">Approval first</div><div class="card-sub" style="margin-top:3px">A denial is terminal. An approval reserves a mailbox and a send slot.</div></div></div>
         </div>
