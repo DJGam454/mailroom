@@ -77,6 +77,42 @@ def test_profile_matures_after_ramp(seeded):
     assert profile["status"] == "active"
 
 
+def test_warmup_domain_cap_reserves_threads(seeded):
+    domain = db.one(
+        seeded,
+        "SELECT domain_id FROM mailboxes GROUP BY domain_id HAVING COUNT(*) >= 2 LIMIT 1",
+    )
+    sources = db.rows(
+        seeded,
+        "SELECT id FROM mailboxes WHERE domain_id = ? ORDER BY id LIMIT 2",
+        (domain["domain_id"],),
+    )
+    target = db.one(
+        seeded,
+        "SELECT id FROM mailboxes WHERE domain_id != ? ORDER BY id LIMIT 1",
+        (domain["domain_id"],),
+    )
+    ids = [row["id"] for row in sources] + [target["id"]]
+    with db.transaction() as conn:
+        warmup.update_settings(
+            conn,
+            {
+                "warmup_min_gap_seconds": "1",
+                "warmup_max_gap_seconds": "1",
+                "warmup_domain_daily_limit": "1",
+                "warmup_max_sends_per_tick": "100",
+            },
+        )
+        warmup.start(conn, ids, daily_limit=2)
+    warmup.tick()
+    created = db.one(
+        seeded,
+        "SELECT COUNT(*) AS count FROM warmup_threads WHERE source_mailbox_id IN (?, ?)",
+        (sources[0]["id"], sources[1]["id"]),
+    )
+    assert created["count"] == 1
+
+
 def test_warmup_pair_cooldown_prevents_repeats(seeded):
     source = db.one(seeded, "SELECT id, domain_id FROM mailboxes ORDER BY id LIMIT 1")
     target = db.one(

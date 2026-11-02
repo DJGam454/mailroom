@@ -166,13 +166,15 @@ def threads_today(conn, mailbox_id: int) -> int:
     )
 
 
-def domain_sent_today(conn, domain_id: int) -> int:
+def domain_threads_today(conn, domain_id: int) -> int:
+    """Reserve the domain cap at thread creation, not only after sending."""
     return _count(
         conn,
         """
-        SELECT COUNT(*) AS count FROM warmup_messages wm
-        JOIN mailboxes m ON m.id = wm.mailbox_id
-        WHERE m.domain_id = ? AND wm.kind = 'initial' AND date(wm.sent_at, 'localtime') = date('now', 'localtime')
+        SELECT COUNT(*) AS count FROM warmup_threads wt
+        JOIN mailboxes m ON m.id = wt.source_mailbox_id
+        WHERE m.domain_id = ?
+          AND date(wt.created_at, 'localtime') = date('now', 'localtime')
         """,
         (domain_id,),
     )
@@ -599,10 +601,12 @@ def tick() -> dict[str, Any]:
                 current = max(sent_today(conn, profile["id"]), threads_today(conn, profile["id"]))
                 if current >= target_count:
                     continue
-                if domain_sent_today(conn, profile["domain_id"]) >= settings["domain_daily_limit"]:
+                if domain_threads_today(conn, profile["domain_id"]) >= settings["domain_daily_limit"]:
                     continue
                 remaining = min(target_count - current, settings["max_per_tick"] - generated)
                 for _ in range(max(0, remaining)):
+                    if domain_threads_today(conn, profile["domain_id"]) >= settings["domain_daily_limit"]:
+                        break
                     target = choose_target(conn, profile, settings)
                     if not target:
                         break
