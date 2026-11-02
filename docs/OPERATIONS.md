@@ -143,6 +143,9 @@ paused mailbox cannot send a stale approval.
 cap and the warmup cap are separate counters, but both consume the provider's
 quota. Keep the combined number under the real provider limit.
 
+Daily counters use the Mac's local date. Keep the Mac timezone aligned with the
+default timezone in Settings so the counter reset matches the campaign window.
+
 **Settings -> Pause all sending** is the emergency stop. It blocks new
 approvals and stops campaign sends. Warmup has its own pause controls.
 

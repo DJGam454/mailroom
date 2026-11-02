@@ -138,6 +138,9 @@ This prevents stale assignments from sending.
 - Leases for 120 seconds. A crashed worker leaves the item leased; the next
   cycle reclaims expired leases.
 - On success: draft/lead/message/usage/activity updates in one transaction.
+- `mailbox_usage_daily.date` is the campaign-local date. Dashboard counters
+  evaluate timestamps against the Mac's local date, so keep the Mac timezone
+  aligned with the default campaign timezone.
 - On a temporary condition (window closed, cap reached, paused mailbox): keep
   the attempt count and reschedule after 300 seconds.
 - On a send error: increment attempts, write the error, retry after 60 seconds,
