@@ -146,6 +146,14 @@ def test_duplicate_queued_send_blocked(seeded):
         assert "queued send" in duplicate.json()["detail"]
 
 
+def test_campaign_uses_default_timezone(seeded):
+    with TestClient(app) as client:
+        client.patch("/api/settings", json={"values": {"default_timezone": "Europe/London"}})
+        created = client.post("/api/campaigns", json={"name": "Timezone campaign"})
+        assert created.status_code == 200
+        assert created.json()["timezone"] == "Europe/London"
+
+
 def test_auto_approval_is_rejected(seeded):
     with TestClient(app) as client:
         response = client.post("/api/campaigns", json={"name": "Auto campaign", "approval_mode": "auto"})
@@ -198,6 +206,29 @@ def test_bounced_lead_cannot_be_approved(seeded):
         response = client.post(f"/api/approvals/{pending['draft_id']}/approve", json={})
         assert response.status_code == 400
         assert "cannot be approved" in response.json()["detail"]
+
+
+def test_agent_redraft(seeded, monkeypatch):
+    from app.services import drafting
+
+    with TestClient(app) as client:
+        pending = client.get("/api/approvals?page_size=1").json()["items"][0]
+        missing = client.post(f"/api/drafts/{pending['draft_id']}/agent")
+        assert missing.status_code == 400
+        assert "webhook" in missing.json()["detail"].lower()
+
+        client.patch("/api/settings", json={"values": {"agent_webhook": "http://agent.test/draft"}})
+        monkeypatch.setattr(
+            drafting,
+            "agent_draft",
+            lambda lead, campaign, instruction, webhook: ("Agent subject", "Agent body"),
+        )
+        generated = client.post(f"/api/drafts/{pending['draft_id']}/agent")
+        assert generated.status_code == 200
+        assert generated.json()["draft"]["subject"] == "Agent subject"
+        again = client.get("/api/approvals?page_size=100").json()["items"]
+        updated = next(item for item in again if item["draft_id"] == pending["draft_id"])
+        assert updated["body"] == "Agent body"
 
 
 def test_denied_draft_is_terminal(seeded):
