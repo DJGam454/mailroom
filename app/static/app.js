@@ -33,6 +33,11 @@ const PAGES = {
     sub: "Volume, caps and DNS checks. No reputation scoring in this phase.",
     icon: "deliverability",
   },
+  warmup: {
+    title: "Warmup",
+    sub: "Closed-pool warmup across your own domains. Cross-domain only, slow ramp.",
+    icon: "target",
+  },
   queue: {
     title: "Send queue",
     sub: "Coordinated sends, spaced by mailbox and domain.",
@@ -42,6 +47,11 @@ const PAGES = {
     title: "Activity",
     sub: "Every approval, queue move and send is recorded.",
     icon: "activity",
+  },
+  sheets: {
+    title: "Google Sheets",
+    sub: "Two-way sync for leads and campaigns, with conflict detection.",
+    icon: "layers",
   },
   settings: {
     title: "Settings",
@@ -65,6 +75,7 @@ const NAV_GROUPS = [
     items: [
       ["inboxes", "Inboxes & domains", "inboxes"],
       ["deliverability", "Deliverability", "deliverability"],
+      ["warmup", "Warmup", "target"],
       ["queue", "Send queue", "queue"],
     ],
   },
@@ -72,6 +83,7 @@ const NAV_GROUPS = [
     label: "System",
     items: [
       ["activity", "Activity", "activity"],
+      ["sheets", "Google Sheets", "layers"],
       ["settings", "Settings", "settings"],
     ],
   },
@@ -110,6 +122,7 @@ const ICONS = {
   zap: '<path d="m13 2-9 12h7l-1 8 9-12h-7l1-8Z"/>',
   layers: '<path d="m12 2 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5"/><path d="m3 17 9 5 9-5"/>',
   send: '<path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4Z"/>',
+  help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 4.6 1.4c-.6.8-1.6 1.2-1.6 2.4"/><path d="M12 17h.01"/>',
 };
 
 const STATUS = {
@@ -128,6 +141,10 @@ const STATUS = {
   pending: ["Pending", "amber"],
   leased: ["Sending", "blue"],
   cancelled: ["Cancelled", "gray"],
+  off: ["Off", "gray"],
+  ramping: ["Ramping", "violet"],
+  active: ["Active", "green"],
+  paused: ["Paused", "amber"],
 };
 
 const ACTIVITY_META = {
@@ -169,8 +186,10 @@ const state = {
   inboxes: [],
   domains: [],
   deliverability: null,
+  warmup: null,
   queue: null,
   activity: [],
+  sheets: null,
   settings: {},
   renderToken: 0,
 };
@@ -449,6 +468,7 @@ function renderShell() {
             <input id="global-search" type="search" placeholder="Search leads by name, email or company..." autocomplete="off" />
           </div>
           <div class="topbar-actions">
+            <button class="icon-btn" data-action="help" title="How Mailroom works" aria-label="Help">${icon("help", 17)}</button>
             <button class="btn primary sm" data-action="new-campaign">${icon("plus", 15)} New campaign</button>
             <div class="avatar">AM</div>
           </div>
@@ -505,6 +525,7 @@ async function refreshApprovalBadge() {
 }
 
 async function route() {
+  closeModal();
   const raw = location.hash.replace(/^#\/?/, "").split("?")[0] || "overview";
   state.page = PAGES[raw] ? raw : "overview";
   updateNav();
@@ -537,8 +558,10 @@ async function renderPage() {
     else if (state.page === "leads") await renderLeads(token);
     else if (state.page === "inboxes") await renderInboxes(token);
     else if (state.page === "deliverability") await renderDeliverability(token);
+    else if (state.page === "warmup") await renderWarmup(token);
     else if (state.page === "queue") await renderQueue(token);
     else if (state.page === "activity") await renderActivity(token);
+    else if (state.page === "sheets") await renderSheets(token);
     else if (state.page === "settings") await renderSettings(token);
   } catch (error) {
     if (token !== state.renderToken) return;
@@ -577,6 +600,7 @@ async function renderOverview(token) {
       </div>
       <div class="page-actions">
         <button class="btn" data-action="refresh">${icon("refresh", 15)} Refresh</button>
+        <a class="btn" href="#/warmup">${icon("target", 15)} Warmup</a>
         <a class="btn primary" href="#/approvals">${icon("approvals", 15)} Review approvals</a>
       </div>
     </div>
@@ -675,6 +699,7 @@ async function renderOverview(token) {
           <div class="card-body">
             <div class="cap-row"><div class="main"><div class="name">Approval required</div><div class="sub">Manual campaigns wait for you</div></div><span class="chip violet">On</span></div>
             <div class="cap-row"><div class="main"><div class="name">Transport</div><div class="sub">${data.mock_only ? "Mock outbox only" : "Real transport configured"}</div></div><span class="chip ${data.mock_only ? "green" : "amber"}">${data.mock_only ? "Safe" : "Live"}</span></div>
+            <div class="cap-row"><div class="main"><div class="name">Warmup</div><div class="sub">${fmtNumber(stats.warmup_active)} active · ${fmtNumber(stats.warmup_sent_today)} sent · ${fmtNumber(stats.warmup_replies_today)} replies today</div></div><a class="chip violet" href="#/warmup">Open</a></div>
             <div class="cap-row"><div class="main"><div class="name">Suppression list</div><div class="sub">Permanent stop addresses</div></div><span class="chip">${fmtNumber(stats.suppressed)}</span></div>
             <div class="cap-row"><div class="main"><div class="name">Worker</div><div class="sub">Checks the queue every 2 seconds</div></div><span class="chip green">Running</span></div>
           </div>
@@ -1482,6 +1507,326 @@ function buildDailySeries(rows) {
   return result;
 }
 
+/* ----------------------------- warmup ----------------------------- */
+
+async function renderWarmup(token) {
+  const data = await api("/warmup");
+  if (token !== state.renderToken) return;
+  state.warmup = data;
+  const summary = data.summary || {};
+  const settings = data.settings || {};
+  const profiles = data.profiles || [];
+  const active = profiles.filter((profile) => profile.enabled && ["ramping", "active"].includes(profile.status));
+  const pairs = data.pair_preview || [];
+  const recent = data.recent || [];
+  const phases = [
+    ["Days 1-3", settings.ramp?.[0] || 2],
+    ["Days 4-7", settings.ramp?.[3] || 4],
+    ["Days 8-14", settings.ramp?.[7] || 6],
+    ["Days 15-21", settings.ramp?.[14] || 10],
+    ["Days 22-30", settings.ramp?.[21] || 15],
+    ["Day 31+", settings.ramp?.[29] || 20],
+  ];
+  $("#page").innerHTML = `
+    <div class="page-head">
+      <div><h1 class="page-title">Warmup</h1><div class="page-sub">${esc(PAGES.warmup.sub)}</div></div>
+      <div class="page-actions">
+        <button class="btn" data-action="refresh">${icon("refresh", 14)} Refresh</button>
+        <button class="btn" data-action="warmup-settings">${icon("settings", 14)} Settings</button>
+        <button class="btn" data-action="warmup-tick">${icon("play", 14)} Run tick</button>
+        ${active.length ? `<button class="btn" data-action="warmup-pause-all">${icon("pause", 14)} Pause all</button>` : `<button class="btn primary" data-action="warmup-start-all">${icon("zap", 14)} Start all</button>`}
+      </div>
+    </div>
+
+    <div class="notice ${active.length ? "violet" : "amber"}" style="margin-bottom:14px">
+      <strong>${active.length ? "Closed-pool warmup is active." : "Warmup is currently off."}</strong>
+      Your 10 domains and 25 mailboxes can warm each other, but this is a closed pool. Mailroom uses cross-domain pairs only, a ${fmtNumber(settings.pair_cooldown_days)}-day pair cooldown, ${fmtNumber(settings.daily_limit)} sends per mailbox per day and ${fmtNumber(settings.domain_daily_limit)} per domain per day. Add 2-4 external seed inboxes (Gmail or Outlook) later for a stronger reputation network.
+    </div>
+
+    <div class="grid stat-grid">
+      <div class="card stat-card"><div class="stat-label">${icon("target", 14)} Active warmups</div><div class="stat-value">${fmtNumber(summary.active)}</div><div class="stat-foot">${fmtNumber(summary.total)} profiles configured</div><div class="stat-icon violet">${icon("target", 15)}</div></div>
+      <div class="card stat-card"><div class="stat-label">${icon("send", 14)} Sent today</div><div class="stat-value">${fmtNumber(summary.sent_today)}</div><div class="stat-foot">${fmtNumber(summary.threads_today)} threads created</div><div class="stat-icon blue">${icon("send", 15)}</div></div>
+      <div class="card stat-card"><div class="stat-label">${icon("mail", 14)} Replies today</div><div class="stat-value">${fmtNumber(summary.replies_today)}</div><div class="stat-foot">${fmtNumber(summary.opened_today)} opened</div><div class="stat-icon green">${icon("checkCircle", 15)}</div></div>
+      <div class="card stat-card"><div class="stat-label">${icon("activity", 14)} Average health</div><div class="stat-value">${fmtNumber(summary.average_health)}<span style="font-size:14px;color:var(--muted-2)">/100</span></div><div class="stat-foot">${fmtNumber(summary.queued)} queued · ${fmtNumber(summary.failed)} failed</div><div class="stat-icon amber">${icon("activity", 15)}</div></div>
+    </div>
+
+    <div class="card mt-16">
+      <div class="card-head"><div><div class="card-title">Mailbox warmup</div><div class="card-sub">Cross-domain only. Every profile has its own ramp and caps.</div></div><div class="right"><span class="chip ${active.length ? "violet" : "gray"}">${active.length ? "Running" : "Off"}</span></div></div>
+        <div class="table-wrap" style="max-height:650px">
+          <table class="table warmup-table">
+            <thead><tr><th>Mailbox</th><th>Status</th><th>Day</th><th>Target</th><th>Sent</th><th>Replies</th><th>Health</th><th></th></tr></thead>
+            <tbody>${profiles.map((profile) => `
+              <tr>
+                <td><div class="cell-person"><div class="avatar sm ${avatarTone(profile.email)}">${esc(initials(profile.display_name || profile.email))}</div><div><div class="name">${esc(profile.display_name || profile.email.split("@")[0])}</div><div class="sub mono">${esc(profile.email)}</div></div></div></td>
+                <td>${statusChip(profile.status)}</td>
+                <td class="cell-muted">${fmtNumber(profile.day)}</td>
+                <td class="cell-muted">${fmtNumber(profile.daily_target)}/day</td>
+                <td><div class="usage-inline">${progress(profile.sent_today, Math.max(1, profile.daily_target), "green")}<span>${fmtNumber(profile.sent_today)}</span></div></td>
+                <td class="cell-muted">${fmtNumber(profile.replies_today)}</td>
+                <td><div class="usage-inline">${progress(profile.health, 100, "green")}<span>${fmtNumber(profile.health)}</span></div></td>
+                <td class="cell-actions">${profile.enabled && ["ramping", "active"].includes(profile.status) ? `<button class="btn xs ghost" data-action="warmup-pause-one" data-id="${profile.id}">Pause</button>` : `<button class="btn xs" data-action="warmup-start-one" data-id="${profile.id}">Start</button>`}</td>
+              </tr>
+            `).join("")}</tbody>
+          </table>
+        </div>
+    </div>
+
+    <div class="grid campaign-grid mt-16">
+        <div class="card">
+          <div class="card-head"><div><div class="card-title">Pairing preview</div><div class="card-sub">Next cross-domain interactions. No same-domain pairs.</div></div><div class="right"><span class="chip gray">${fmtNumber(pairs.length)} shown</span></div></div>
+          <div class="card-body flush" style="padding:6px 17px 10px">
+            ${pairs.length ? pairs.map((pair) => `<div class="queue-row"><div class="queue-main"><div class="name">${esc(pair.from)} <span style="color:var(--muted-2)">to</span> ${esc(pair.to || "no eligible target")}</div><div class="sub">${esc(pair.from_domain)} → ${esc(pair.to_domain || "waiting")}</div></div><span class="chip violet">Cross-domain</span></div>`).join("") : emptyState("No active pairs", "Start warmup to generate a cross-domain pairing plan.", "target")}
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><div><div class="card-title">Ramp and rules</div><div class="card-sub">Conservative by default. Raise caps only after DNS and placement are stable.</div></div></div>
+          <div class="card-body">
+            <div class="form-grid" style="gap:8px">
+              ${phases.map(([label, value]) => `<div class="cap-row"><div class="main"><div class="name">${esc(label)}</div><div class="sub">warmup sends per mailbox</div></div><span class="chip gray">${fmtNumber(value)}/day</span></div>`).join("")}
+            </div>
+            <div class="divider"></div>
+            <div class="cap-row"><div class="main"><div class="name">Reply rate</div><div class="sub">simulated and real replies</div></div><span class="chip green">${Math.round(Number(settings.reply_rate || 0) * 100)}%</span></div>
+            <div class="cap-row"><div class="main"><div class="name">Open / read rate</div><div class="sub">best-effort IMAP read flag</div></div><span class="chip blue">${Math.round(Number(settings.open_rate || 0) * 100)}%</span></div>
+            <div class="cap-row"><div class="main"><div class="name">Pair cooldown</div><div class="sub">same two mailboxes cannot repeat</div></div><span class="chip gray">${fmtNumber(settings.pair_cooldown_days)} days</span></div>
+            <div class="cap-row"><div class="main"><div class="name">Window</div><div class="sub">local mailbox timezone</div></div><span class="chip gray">${esc(settings.window_start)}-${esc(settings.window_end)}</span></div>
+            <div class="notice mt-12">This is an activity score, not a provider reputation score. Add external seed inboxes and monitor real placement before relying on it.</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><div><div class="card-title">Recent warmup activity</div><div class="card-sub">Opens and replies are recorded, not guessed.</div></div></div>
+          <div class="card-body">${recent.length ? `<div class="timeline">${recent.slice(0, 7).map((message) => `<div class="timeline-item ${message.kind === "reply" ? "green" : "violet"}"><div class="timeline-title">${message.kind === "reply" ? "Reply sent" : "Warmup sent"} <span class="muted-2 small">${esc(message.from_email)} → ${esc(message.to_email)}</span></div><div class="timeline-sub">${message.read_at ? "read" : "not read"}${message.replied_at ? " · replied" : ""}</div><div class="timeline-time">${esc(fmtDate(message.sent_at))}</div></div>`).join("")}</div>` : emptyState("No warmup activity", "Start a batch and run a tick to see the interaction log.", "activity")}</div>
+        </div>
+    </div>
+  `;
+}
+
+function openWarmupSettings() {
+  const settings = state.warmup?.settings || {};
+  openModal({
+    title: "Warmup settings",
+    sub: "Keep these conservative for new domains. The defaults are designed for a closed pool.",
+    wide: true,
+    body: `
+      <form id="modal-form">
+        <div class="form-grid">
+          <div class="field"><label for="wu-daily">Daily limit per mailbox</label><input class="input" id="wu-daily" name="warmup_daily_limit" type="number" min="1" value="${esc(settings.daily_limit || 10)}" /></div>
+          <div class="field"><label for="wu-domain">Daily limit per domain</label><input class="input" id="wu-domain" name="warmup_domain_daily_limit" type="number" min="1" value="${esc(settings.domain_daily_limit || 50)}" /></div>
+          <div class="field"><label for="wu-cooldown">Pair cooldown (days)</label><input class="input" id="wu-cooldown" name="warmup_pair_cooldown_days" type="number" min="1" value="${esc(settings.pair_cooldown_days || 7)}" /></div>
+          <div class="field"><label for="wu-reply">Reply rate (%)</label><input class="input" id="wu-reply" name="warmup_reply_rate" type="number" min="0" max="100" value="${Math.round(Number(settings.reply_rate || 0.3) * 100)}" /></div>
+          <div class="field"><label for="wu-open">Open / read rate (%)</label><input class="input" id="wu-open" name="warmup_open_rate" type="number" min="0" max="100" value="${Math.round(Number(settings.open_rate || 0.8) * 100)}" /></div>
+          <div class="field"><label for="wu-gap-min">Minimum gap (seconds)</label><input class="input" id="wu-gap-min" name="warmup_min_gap_seconds" type="number" min="1" value="${esc(settings.min_gap || 5)}" /></div>
+          <div class="field"><label for="wu-gap-max">Maximum gap (seconds)</label><input class="input" id="wu-gap-max" name="warmup_max_gap_seconds" type="number" min="1" value="${esc(settings.max_gap || 30)}" /></div>
+          <div class="field"><label for="wu-window-start">Window start</label><input class="input" id="wu-window-start" name="warmup_window_start" type="time" value="${esc(settings.window_start || "00:00")}" /></div>
+          <div class="field"><label for="wu-window-end">Window end</label><input class="input" id="wu-window-end" name="warmup_window_end" type="time" value="${esc(settings.window_end || "23:59")}" /></div>
+          <div class="field"><label for="wu-max-tick">Max sends per tick</label><input class="input" id="wu-max-tick" name="warmup_max_sends_per_tick" type="number" min="1" value="${esc(settings.max_per_tick || 10)}" /></div>
+        </div>
+        <label class="checkline mt-12"><input type="checkbox" name="warmup_weekdays_only" ${settings.weekdays_only ? "checked" : ""}/> Weekdays only</label>
+        <div class="notice mt-12">For real domains, raise the gap to 5-15 minutes and keep 5-10 sends per mailbox per day. The demo uses short gaps so you can see activity immediately.</div>
+      </form>
+    `,
+    footer: `<button class="btn" data-action="close-modal">Cancel</button><button class="btn primary" type="submit" form="modal-form">Save warmup settings</button>`,
+    onSubmit: async (formData) => {
+      const values = {
+        warmup_daily_limit: formData.get("warmup_daily_limit"),
+        warmup_domain_daily_limit: formData.get("warmup_domain_daily_limit"),
+        warmup_pair_cooldown_days: formData.get("warmup_pair_cooldown_days"),
+        warmup_reply_rate: String(Number(formData.get("warmup_reply_rate")) / 100),
+        warmup_open_rate: String(Number(formData.get("warmup_open_rate")) / 100),
+        warmup_min_gap_seconds: formData.get("warmup_min_gap_seconds"),
+        warmup_max_gap_seconds: formData.get("warmup_max_gap_seconds"),
+        warmup_window_start: formData.get("warmup_window_start"),
+        warmup_window_end: formData.get("warmup_window_end"),
+        warmup_max_sends_per_tick: formData.get("warmup_max_sends_per_tick"),
+        warmup_weekdays_only: formData.get("warmup_weekdays_only") === "on" ? "1" : "0",
+      };
+      await api("/warmup/settings", { method: "PATCH", body: JSON.stringify({ values }) });
+      toast("Warmup settings saved.");
+      renderPage();
+    },
+  });
+}
+
+async function warmupAction(action, id = null) {
+  try {
+    if (action === "start-all") {
+      openConfirm("Start warmup?", "This will start the ramp for all eligible mailboxes. In the demo they use the mock transport.", async () => {
+        const result = await api("/warmup/start", {
+          method: "POST",
+          body: JSON.stringify({ daily_limit: Number(state.warmup?.settings?.daily_limit || 10) }),
+        });
+        toast(`Warmup started for ${result.started} mailboxes. ${result.tick?.generated || 0} thread(s) generated.`);
+        renderPage();
+      });
+      return;
+    }
+    if (action === "tick") {
+      const result = await api("/warmup/tick", { method: "POST" });
+      toast(`Warmup tick: ${result.generated || 0} generated, ${result.sent || 0} sent, ${result.replied || 0} replied.`);
+      renderPage();
+      return;
+    }
+    if (action === "pause-all") {
+      await api("/warmup/pause", { method: "POST", body: JSON.stringify({}) });
+      toast("Warmup paused for all mailboxes.");
+      renderPage();
+      return;
+    }
+    if (action === "start-one") {
+      const result = await api("/warmup/start", {
+        method: "POST",
+        body: JSON.stringify({ mailbox_ids: [id], daily_limit: Number(state.warmup?.settings?.daily_limit || 10) }),
+      });
+      toast(`Warmup started for ${result.started} mailbox.`);
+      renderPage();
+      return;
+    }
+    if (action === "pause-one") {
+      await api("/warmup/pause", { method: "POST", body: JSON.stringify({ mailbox_ids: [id] }) });
+      toast("Warmup paused for this mailbox.");
+      renderPage();
+    }
+  } catch (error) {
+    toast(error.message, "error");
+  }
+}
+
+/* ----------------------------- Google Sheets ----------------------------- */
+
+async function renderSheets(token) {
+  const data = await api("/sheets/status");
+  if (token !== state.renderToken) return;
+  state.sheets = data;
+  const counts = data.local_counts || {};
+  $("#page").innerHTML = `
+    <div class="page-head">
+      <div><h1 class="page-title">Google Sheets</h1><div class="page-sub">${esc(PAGES.sheets.sub)}</div></div>
+      <div class="page-actions">${data.configured ? `<a class="btn" href="https://docs.google.com/spreadsheets/d/${encodeURIComponent(data.spreadsheet_id)}/edit" target="_blank" rel="noreferrer">${icon("globe", 14)} Open sheet</a>` : ""}<button class="btn" data-action="sheet-test" ${data.configured ? "" : 'disabled title="Save a connection first"'}>${icon("checkCircle", 14)} Test connection</button><button class="btn primary" data-action="sheet-sync" data-direction="both" ${data.configured ? "" : 'disabled title="Save a connection first"'}>${icon("refresh", 14)} Two-way sync</button></div>
+    </div>
+    ${data.configured ? `<div class="notice green" style="margin-bottom:14px">Connected${data.service_account_email ? ` as <strong>${esc(data.service_account_email)}</strong>` : ""}. Last sync: ${data.last_sync_at ? esc(fmtDate(data.last_sync_at)) : "never"}.</div>` : `<div class="notice amber" style="margin-bottom:14px">Not configured. Add a spreadsheet ID and service account JSON below, share the sheet with the service account email, then test.</div>`}
+    <div class="grid dashboard-grid">
+      <div class="card">
+        <div class="card-head"><div><div class="card-title">Connection</div><div class="card-sub">Use a dedicated spreadsheet. The service account needs edit access.</div></div><div class="right"><span class="chip ${data.configured ? "green" : "gray"}">${data.configured ? "Configured" : "Not configured"}</span></div></div>
+        <form class="card-body" id="sheets-form">
+          <div class="field"><label for="sheet-id">Spreadsheet ID</label><input class="input" id="sheet-id" name="spreadsheet_id" value="${esc(data.spreadsheet_id || "")}" placeholder="1AbC... from the sheet URL" /></div>
+          <div class="field mt-12"><label for="sheet-credentials">Service account JSON</label><textarea class="textarea" id="sheet-credentials" name="credentials_json" style="min-height:150px" placeholder="${data.credentials_present ? "Saved. Paste a new JSON to replace it." : "Paste the service account JSON here"}"></textarea><div class="hint">The JSON is encrypted at rest with the local Mailroom key. It is never returned by the API.</div></div>
+          <div class="field mt-8"><label for="sheet-json-file">Or upload the JSON key file</label><input class="input" id="sheet-json-file" type="file" accept=".json,application/json" style="padding-top:7px" /></div>
+          <div class="field mt-12"><label for="sheet-policy">Conflict policy</label><select class="select" id="sheet-policy" name="conflict_policy"><option value="merge" ${data.conflict_policy === "merge" ? "selected" : ""}>Merge: stop on conflicts and report them</option><option value="local" ${data.conflict_policy === "local" ? "selected" : ""}>Local wins</option><option value="remote" ${data.conflict_policy === "remote" ? "selected" : ""}>Sheet wins</option></select></div>
+          <div class="row mt-16"><button class="btn primary" type="submit">${icon("check", 14)} Save connection</button><span class="muted small">The next step is Test connection.</span></div>
+          ${data.service_account_email ? `<div class="notice violet mt-12">Share the sheet with <strong>${esc(data.service_account_email)}</strong> as an Editor. This is the service account, not your Google login.</div>` : ""}
+        </form>
+      </div>
+
+      <div class="grid" style="gap:14px">
+        <div class="card">
+          <div class="card-head"><div><div class="card-title">Sync actions</div><div class="card-sub">Pull reads the sheet. Push writes the local database. Both applies non-conflicting remote changes, then writes.</div></div></div>
+          <div class="card-body">
+            <div class="row wrap"><button class="btn" data-action="sheet-sync" data-direction="pull" ${data.configured ? "" : "disabled"}>Pull from sheet</button><button class="btn" data-action="sheet-sync" data-direction="push" ${data.configured ? "" : "disabled"}>Push to sheet</button><button class="btn" data-action="sheet-sync" data-direction="both" data-dry="1" ${data.configured ? "" : "disabled"}>Dry run</button><button class="btn primary" data-action="sheet-sync" data-direction="both" ${data.configured ? "" : "disabled"}>Sync both ways</button></div>
+            <div class="divider"></div>
+            <div class="cap-row"><div class="main"><div class="name">Local records</div><div class="sub">leads · campaigns · suppression · warmup profiles</div></div><span class="chip gray">${fmtNumber(counts.leads)} · ${fmtNumber(counts.campaigns)} · ${fmtNumber(counts.suppression)} · ${fmtNumber(counts.warmup)}</span></div>
+            <div class="cap-row"><div class="main"><div class="name">Tabs</div><div class="sub">created automatically on test</div></div><span class="chip gray">${Object.values(data.tabs || {}).length}</span></div>
+            <div id="sheet-result" class="mt-12"></div>
+          </div>
+        </div>
+
+        <div class="card card-body">
+          <div class="card-title">What syncs</div>
+          <div class="cap-row"><div class="main"><div class="name">Leads</div><div class="sub">name, email, role, company, industry, city, website, notes, offer, grade, verification</div></div><span class="chip green">Two-way</span></div>
+          <div class="cap-row"><div class="main"><div class="name">Campaigns</div><div class="sub">name, status, limits, window, timezone, rotation</div></div><span class="chip green">Two-way</span></div>
+          <div class="cap-row"><div class="main"><div class="name">Suppression</div><div class="sub">union of local and sheet emails</div></div><span class="chip blue">Union</span></div>
+          <div class="cap-row"><div class="main"><div class="name">Warmup</div><div class="sub">read-only health and volume snapshot</div></div><span class="chip gray">Read-only</span></div>
+          <div class="notice mt-12">Lead status is app-controlled. Use Approvals for approve/deny. This avoids a sheet edit bypassing the approval gate.</div>
+        </div>
+
+        <div class="card card-body">
+          <div class="card-title">Setup</div>
+          <div class="card-sub mt-8">1. Create a Google Cloud service account and enable the Sheets API. 2. Download the JSON key. 3. Share the spreadsheet with the service account email as Editor. 4. Paste the spreadsheet ID and JSON above. 5. Test connection, then pull.</div>
+          <div class="small muted mt-12">Full guide: docs/GOOGLE_SHEETS.md</div>
+        </div>
+      </div>
+    </div>
+  `;
+  $("#sheet-json-file").addEventListener("change", async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      $("#sheet-credentials").value = await file.text();
+      toast("JSON key loaded. Click Save connection.");
+    } catch (error) {
+      toast(error.message, "error");
+    }
+  });
+  $("#sheets-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    try {
+      await api("/sheets/configure", {
+        method: "POST",
+        body: JSON.stringify({
+          spreadsheet_id: form.spreadsheet_id.value,
+          credentials_json: form.credentials_json.value || null,
+          conflict_policy: form.conflict_policy.value,
+        }),
+      });
+      toast("Google Sheets connection saved. Run Test connection.");
+      renderPage();
+    } catch (error) {
+      toast(error.message, "error");
+    }
+  });
+}
+
+async function sheetTest() {
+  try {
+    const result = await api("/sheets/test", { method: "POST" });
+    toast(`Connected to ${result.spreadsheet}. ${Object.keys(result.tabs || {}).length} tabs ready.`);
+    renderSheetResult({ ok: true, ...result });
+  } catch (error) {
+    toast(error.message, "error");
+    renderSheetResult({ ok: false, error: error.message });
+  }
+}
+
+async function sheetSync(direction, dryRun) {
+  try {
+    const result = await api("/sheets/sync", {
+      method: "POST",
+      body: JSON.stringify({ direction, dry_run: dryRun }),
+    });
+    const prefix = dryRun ? "Dry run" : "Sync";
+    toast(`${prefix}: ${result.conflicts?.length || 0} conflict(s), ${result.errors?.length || 0} error(s).`, result.conflicts?.length ? "error" : "success");
+    renderSheetResult(result);
+  } catch (error) {
+    toast(error.message, "error");
+    renderSheetResult({ ok: false, error: error.message });
+  }
+}
+
+function renderSheetResult(result) {
+  const box = $("#sheet-result");
+  if (!box) return;
+  const conflicts = result.conflicts || [];
+  const errors = result.errors || [];
+  const pulled = result.pulled || {};
+  const pushed = result.pushed || {};
+  const isTest = Boolean(result.spreadsheet && !result.pulled && !result.pushed);
+  const tabs = result.tabs ? Object.values(result.tabs) : [];
+  const summary = isTest
+    ? `Connected to ${esc(result.spreadsheet)}. ${tabs.length} tabs ready: ${tabs.map(esc).join(", ")}.`
+    : `Pulled leads ${pulled.leads?.updated ?? 0}, created ${pulled.leads?.created ?? 0}; campaigns ${pulled.campaigns?.updated ?? 0}; suppression ${pulled.suppression?.inserted ?? 0}. Pushed leads ${pushed.leads ?? 0}, campaigns ${pushed.campaigns ?? 0}, warmup ${pushed.warmup ?? 0}.`;
+  box.innerHTML = `
+    <div class="notice ${result.ok && !conflicts.length && !errors.length ? "green" : "red"}">
+      <strong>${isTest ? "Connection test" : result.ok === false ? "Needs attention" : "Sync result"}</strong>
+      ${result.aborted_push ? `<div class="mt-8">${esc(result.aborted_push)}</div>` : ""}
+      ${conflicts.length ? `<div class="mt-8">${conflicts.length} conflict(s) left untouched. Choose a policy or resolve the rows in the sheet.</div>` : ""}
+      ${errors.length ? `<div class="mt-8">${errors.length} error(s).</div>` : ""}
+      ${!conflicts.length && !errors.length ? `<div class="mt-8">${summary}</div>` : ""}
+    </div>
+    ${conflicts.length || errors.length ? `<div class="code-block mt-8">${esc(JSON.stringify({ conflicts, errors }, null, 2))}</div>` : ""}
+  `;
+}
+
 /* ----------------------------- queue ----------------------------- */
 
 async function renderQueue(token) {
@@ -1636,7 +1981,42 @@ async function renderSettings(token) {
   });
 }
 
-/* ----------------------------- modal, confirm, navigation ----------------------------- */
+/* ----------------------------- help and modal ----------------------------- */
+
+function openHelpModal() {
+  openModal({
+    title: "How Mailroom works",
+    sub: "A quick map of the approval, sending, warmup and sync layers.",
+    wide: true,
+    body: `
+      <div class="grid" style="grid-template-columns:1fr 1fr;gap:12px">
+        <div class="card card-body">
+          <div class="card-title">1. Approve</div>
+          <div class="card-sub mt-8">Open Approvals, choose a campaign in the left sidebar, and review one person at a time. Approve & queue reserves a mailbox and a send slot. Deny is terminal. Status is app-controlled, not editable from the sheet.</div>
+          <a class="btn sm mt-12" href="#/approvals">Open approvals</a>
+        </div>
+        <div class="card card-body">
+          <div class="card-title">2. Send</div>
+          <div class="card-sub mt-8">The queue worker checks caps, domain limits, the send window and the mailbox. Mock mode writes .eml files under data/outbox. Real SMTP or Apps Script mailboxes send for real.</div>
+          <a class="btn sm mt-12" href="#/queue">Open queue</a>
+        </div>
+        <div class="card card-body">
+          <div class="card-title">3. Warm up</div>
+          <div class="card-sub mt-8">Your 10 domains and 25 mailboxes can warm each other, but it is a closed pool. Warmup uses cross-domain pairs, a 7-day pair cooldown, a slow ramp and separate caps. Add 2-4 external seed inboxes later.</div>
+          <a class="btn sm mt-12" href="#/warmup">Open warmup</a>
+        </div>
+        <div class="card card-body">
+          <div class="card-title">4. Sync a sheet</div>
+          <div class="card-sub mt-8">Leads and campaigns can go both ways. Suppression is a union. Warmup is read-only. Conflicts are reported instead of silently overwritten. Open the Google Sheets page for setup.</div>
+          <a class="btn sm mt-12" href="#/sheets">Open sheets</a>
+        </div>
+      </div>
+      <div class="notice green mt-12">Default = mock mode. No mail leaves this Mac until a real mailbox transport is configured. Real lead data stays in data/mailroom.db and is gitignored.</div>
+      <div class="notice mt-12">The detailed guides are docs/OPERATIONS.md, docs/WARMUP.md and docs/GOOGLE_SHEETS.md in the repository.</div>
+    `,
+    footer: `<button class="btn primary" data-action="close-modal">Got it</button>`,
+  });
+}
 
 function closeModal() {
   const root = $("#modal-root");
@@ -1705,6 +2085,10 @@ document.addEventListener("click", async (event) => {
   }
   if (action === "refresh") {
     renderPage();
+    return;
+  }
+  if (action === "help") {
+    openHelpModal();
     return;
   }
   if (action === "new-campaign") {
@@ -1805,6 +2189,38 @@ document.addEventListener("click", async (event) => {
     await checkDomain(id);
     return;
   }
+  if (action === "warmup-settings") {
+    openWarmupSettings();
+    return;
+  }
+  if (action === "warmup-tick") {
+    await warmupAction("tick");
+    return;
+  }
+  if (action === "warmup-start-all") {
+    await warmupAction("start-all");
+    return;
+  }
+  if (action === "warmup-pause-all") {
+    await warmupAction("pause-all");
+    return;
+  }
+  if (action === "warmup-start-one") {
+    await warmupAction("start-one", id);
+    return;
+  }
+  if (action === "warmup-pause-one") {
+    await warmupAction("pause-one", id);
+    return;
+  }
+  if (action === "sheet-test") {
+    await sheetTest();
+    return;
+  }
+  if (action === "sheet-sync") {
+    await sheetSync(target.dataset.direction || "both", target.dataset.dry === "1");
+    return;
+  }
   if (action === "queue-tick") {
     await queueTick();
     return;
@@ -1820,6 +2236,15 @@ document.addEventListener("click", async (event) => {
 });
 
 document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && $("#modal-root")?.children.length) {
+    closeModal();
+    return;
+  }
+  if (event.key === "?" && !["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) {
+    event.preventDefault();
+    openHelpModal();
+    return;
+  }
   if (state.page !== "approvals") return;
   if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) return;
   if (!selectedApprovalItem()) return;
@@ -1835,6 +2260,9 @@ document.addEventListener("keydown", (event) => {
   } else if (event.key === "d") {
     event.preventDefault();
     openDenyModal(state.selectedApproval);
+  } else if (event.key === "e") {
+    event.preventDefault();
+    openEditDraftModal(state.selectedApproval);
   }
 });
 
