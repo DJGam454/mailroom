@@ -103,6 +103,27 @@ Useful controls:
 The demo mailboxes are mock, so warmup writes `.eml` files to
 `data/warmup_outbox/`. Nothing leaves the Mac.
 
+## Adding an external seed inbox
+
+The closed pool is the default, but you can add a real Gmail or Outlook inbox
+as an extra warmup participant. It gives the pool a provider outside your own
+domains.
+
+1. Add the provider domain (for example `gmail.com`) under **Inboxes &
+   domains**. Its SPF, DKIM and DMARC checks may not pass; that is expected for
+   a receiving seed. Keep the domain active.
+2. Add the seed mailbox under that domain with the provider's SMTP and IMAP
+   settings, or the Apps Script bridge.
+3. Do **not** assign the seed mailbox to a campaign. Use the mailbox edit
+   modal to uncheck every campaign.
+4. Test the connection, then start warmup for that profile.
+5. Keep the seed volume low. It still consumes the provider's sending quota
+   and is subject to that provider's terms.
+
+The engine will pair the seed with your own domains and respect the same
+cooldown and caps. It will not treat the seed as a campaign sender because it
+has no campaign assignment.
+
 ## Real warmup checklist
 
 - SPF, DKIM and DMARC pass on every domain.
