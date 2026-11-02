@@ -116,6 +116,8 @@ Campaigns:
 Suppression:
 
 - email and reason are unioned into the local suppression list.
+- A new address from the sheet also denies pending drafts and cancels queued
+  sends, exactly like adding it on the Suppression page.
 
 Warmup:
 
@@ -139,7 +141,9 @@ The CLI reads the same local configuration. Use it from cron or a terminal.
 
 - One spreadsheet per Mailroom instance.
 - The tabs are global, not one spreadsheet per campaign.
-- Campaigns are separated by the Campaign column in the Leads tab.
+- Campaigns are separated by the Campaign column in the Leads tab. Changing
+  the Campaign ID on an existing row does not move the lead; re-import it into
+  the target campaign instead.
 - If the header row is changed, sync refuses to run until it is restored.
 - Warmup is one row per mailbox, not a per-thread history.
 - There is no background auto-sync in this phase. Run sync manually, from the

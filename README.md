@@ -46,7 +46,7 @@ python3 -m app.seed
 uvicorn app.main:app --host 127.0.0.1 --port 4600 --reload
 ```
 
-Open <http://127.0.0.1:4600>.
+Open <http://127.0.0.1:4600>. Requires Python 3.12 or newer.
 
 The seed creates synthetic data only:
 
@@ -288,7 +288,7 @@ app/
 scripts/
   import_icp.py        import a real ICPExtractor pack locally
   sync_sheets.py       command-line Sheets sync
-tests/                 43 backend tests
+tests/                 45 backend tests
 integrations/
   apps_script/         optional Gmail bridge
 docs/
@@ -306,7 +306,7 @@ docs/
 make check
 ```
 
-This compiles the Python, checks the JavaScript syntax and runs the 43-test
+This compiles the Python, checks the JavaScript syntax and runs the 45-test
 pytest suite. GitHub Actions runs the same checks on every push and pull
 request.
 

@@ -99,8 +99,8 @@ contact this address again** is ticked. Suppression blocks queueing and is
 checked again at send time.
 
 The gear button on a campaign card opens campaign settings for the name,
-status, limits, window, timezone and rotation. Auto-send is scaffolded but not
-active; all sends still require approval.
+status, limits, window, timezone and rotation. Auto-send is not implemented;
+every send still requires approval.
 
 ## 4. Rotation and caps
 
