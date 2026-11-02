@@ -41,6 +41,20 @@ def test_mock_send_marks_message_sent(seeded):
     assert files
 
 
+def test_global_pause_blocks_the_worker(seeded):
+    draft = db.one(seeded, "SELECT * FROM drafts WHERE status = 'pending' ORDER BY id LIMIT 1")
+    with db.transaction() as conn:
+        result = approvals.approve_draft(conn, draft["id"])
+    with db.transaction() as conn:
+        conn.execute("UPDATE send_queue SET scheduled_at = ? WHERE id = ?", (db.now_iso(), result["queue"]["id"]))
+        db.set_setting(conn, "sending_paused", "1")
+    tick = worker.tick()
+    assert tick["sent"] == 0
+    queue = db.one(seeded, "SELECT status, last_error FROM send_queue WHERE id = ?", (result["queue"]["id"],))
+    assert queue["status"] == "queued"
+    assert "paused" in (queue["last_error"] or "").lower()
+
+
 def test_duplicate_send_is_not_created(seeded):
     draft = db.one(seeded, "SELECT * FROM drafts WHERE status = 'pending' ORDER BY id LIMIT 1")
     with db.transaction() as conn:
