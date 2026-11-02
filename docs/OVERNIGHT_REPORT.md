@@ -34,11 +34,12 @@ The app has:
   read-only warmup tab, with timestamp and content-hash conflict detection.
 - Suppression management page and editable campaign settings.
 - Approval search, recently sent table and edit-from-lead.
+- Manual Agent re-draft button for a configured webhook.
 - Global pause switch, repeat-send protection across campaigns, and no auto
   approval path.
 - Combined campaign plus warmup volume on the inbox and deliverability pages.
 - Activity log and CSV/JSON import.
-- 45 passing tests and a GitHub Actions workflow.
+- 47 passing tests and a GitHub Actions workflow.
 
 Real lead data is stored only in `data/mailroom.db`, which is gitignored. The
 public repo contains synthetic demo leads only.

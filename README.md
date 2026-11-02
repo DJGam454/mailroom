@@ -288,7 +288,7 @@ app/
 scripts/
   import_icp.py        import a real ICPExtractor pack locally
   sync_sheets.py       command-line Sheets sync
-tests/                 45 backend tests
+tests/                 47 backend tests
 integrations/
   apps_script/         optional Gmail bridge
 docs/
@@ -306,7 +306,7 @@ docs/
 make check
 ```
 
-This compiles the Python, checks the JavaScript syntax and runs the 45-test
+This compiles the Python, checks the JavaScript syntax and runs the 47-test
 pytest suite. GitHub Actions runs the same checks on every push and pull
 request.
 
@@ -376,15 +376,17 @@ Deferred:
 
 ## Agent hook
 
-Settings includes an optional agent webhook. Mailroom can POST a lead and
-campaign to an external agent and expects:
+Settings includes an optional agent webhook. Configure it, then open an
+approval and click **Agent** to re-draft that one lead. Mailroom POSTs the lead
+and campaign and expects:
 
 ```json
 {"subject": "...", "body": "..."}
 ```
 
-If the agent fails, Mailroom falls back to the local template. This is the
-connection point for the OpenCode or OpenBot agent team.
+If the webhook is missing or returns an invalid draft, the existing draft is
+left unchanged and the UI shows the error. This is the connection point for the
+OpenCode or OpenBot agent team.
 
 ## License
 

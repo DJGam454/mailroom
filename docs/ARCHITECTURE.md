@@ -259,6 +259,7 @@ GET    /api/approvals
 POST   /api/approvals/{draft_id}/approve
 POST   /api/approvals/{draft_id}/deny
 POST   /api/approvals/bulk
+POST   /api/drafts/{id}/agent
 PATCH  /api/drafts/{id}
 
 GET    /api/mailboxes
