@@ -17,6 +17,9 @@ The first start without a database seeds synthetic demo data: 10 `.test`
 domains, 25 mock inboxes, two campaigns and 34 leads. There are no real
 addresses and no credentials in the repository.
 
+After the first seed, set `MAILROOM_AUTO_SEED=0` in `.env` if you do not want
+demo data recreated when the campaign table is empty.
+
 ## 2. Import your real ICP pack
 
 The real pack lives outside this repository. The app stores it in

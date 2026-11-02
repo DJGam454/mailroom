@@ -49,6 +49,9 @@ uvicorn app.main:app --host 127.0.0.1 --port 4600 --reload
 
 Open <http://127.0.0.1:4600>. Requires Python 3.12 or newer.
 
+The seed is only applied when the campaign table is empty. Set
+`MAILROOM_AUTO_SEED=0` to disable it after the first run.
+
 The seed creates synthetic data only:
 
 - 10 `.test` domains
@@ -294,7 +297,7 @@ app/
 scripts/
   import_icp.py        import a real ICPExtractor pack locally
   sync_sheets.py       command-line Sheets sync
-tests/                 54 backend tests
+tests/                 55 backend tests
 integrations/
   apps_script/         optional Gmail bridge
 docs/
@@ -312,7 +315,7 @@ docs/
 make check
 ```
 
-This compiles the Python, checks the JavaScript syntax and runs the 54-test
+This compiles the Python, checks the JavaScript syntax and runs the 55-test
 pytest suite. GitHub Actions runs the same checks on every push and pull
 request.
 

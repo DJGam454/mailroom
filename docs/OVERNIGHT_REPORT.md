@@ -40,7 +40,7 @@ The app has:
   approval path.
 - Combined campaign plus warmup volume on the inbox and deliverability pages.
 - Activity log and CSV/JSON import.
-- 54 passing tests and a GitHub Actions workflow.
+- 55 passing tests and a GitHub Actions workflow.
 
 Real lead data is stored only in `data/mailroom.db`, which is gitignored. The
 public repo contains synthetic demo leads only.
