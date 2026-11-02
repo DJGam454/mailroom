@@ -1,9 +1,20 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta, timezone
 
 from app import db
 from app.services import sheets
+
+
+def _a1_rowcol(value: str) -> tuple[int, int]:
+    match = re.match(r"^([A-Z]+)(\d+)$", value or "A1")
+    if not match:
+        return 0, 0
+    column = 0
+    for letter in match.group(1):
+        column = column * 26 + (ord(letter) - ord("A") + 1)
+    return int(match.group(2)) - 1, column - 1
 
 
 class FakeWorksheet:
@@ -22,8 +33,16 @@ class FakeWorksheet:
         self.values = []
 
     def update(self, values, range_name=None, value_input_option=None):
-        self.values = [list(row) for row in values]
-        self.col_count = max(self.col_count, max(len(row) for row in values))
+        start_row, start_col = _a1_rowcol((range_name or "A1").split(":", 1)[0])
+        width = max(len(row) for row in values) if values else 0
+        while len(self.values) < start_row + len(values):
+            self.values.append([])
+        for row in self.values:
+            row.extend([""] * max(0, start_col + width - len(row)))
+        for offset, row in enumerate(values):
+            for index, value in enumerate(row):
+                self.values[start_row + offset][start_col + index] = str(value)
+        self.col_count = max(self.col_count, width)
 
 
 class FakeSpreadsheet:
@@ -51,6 +70,20 @@ def test_write_read_round_trip():
     rows = sheets.read_tab(worksheet, headers)
     assert rows[0]["Email"] == "a@example.test"
     assert rows[0]["Reason"] == "reason"
+
+
+def test_write_tab_preserves_helper_columns():
+    worksheet = FakeWorksheet()
+    headers = sheets.HEADERS["suppression"]
+    sheets.write_tab(worksheet, headers, [["a@example.test", "reason", "2026-11-02T00:00:00Z"]])
+    worksheet.values[0].append("My note")
+    worksheet.values[1].append("keep me")
+    sheet_header = worksheet.values[0]
+    assert sheet_header[-1] == "My note"
+    sheets.write_tab(worksheet, headers, [["a@example.test", "updated", "2026-11-02T00:00:00Z"]])
+    assert worksheet.values[0][-1] == "My note"
+    assert worksheet.values[1][-1] == "keep me"
+    assert worksheet.values[1][1] == "updated"
 
 
 def test_parse_sheet_time_iso_and_serial():
@@ -140,6 +173,42 @@ def test_full_sync_against_fake_worksheet(seeded, monkeypatch):
     assert not pulled["conflicts"]
     updated = db.one(seeded, "SELECT name FROM leads WHERE id = ?", (lead_id,))
     assert updated["name"] == "Pulled from fake sheet"
+
+
+def test_invalid_sheet_edits_are_reported(seeded):
+    campaign = db.one(
+        seeded,
+        "SELECT campaign_id FROM leads GROUP BY campaign_id HAVING COUNT(*) > 1 LIMIT 1",
+    )
+    leads = db.rows(
+        seeded,
+        "SELECT * FROM leads WHERE campaign_id = ? ORDER BY id LIMIT 2",
+        (campaign["campaign_id"],),
+    )
+    future = (datetime.now(timezone.utc) + timedelta(hours=2)).isoformat()
+    duplicate = {
+        "ID": str(leads[1]["id"]),
+        "Campaign ID": str(campaign["campaign_id"]),
+        "Name": leads[1]["name"],
+        "Email": leads[0]["email"],
+        "Updated At": future,
+    }
+    result = sheets.apply_remote_leads(seeded, [duplicate], policy="merge")
+    assert result["errors"]
+    assert result["updated"] == 0
+
+    campaign_row = db.one(seeded, "SELECT * FROM campaigns WHERE id = ?", (campaign["campaign_id"],))
+    bad_campaign = {
+        "ID": str(campaign_row["id"]),
+        "Name": campaign_row["name"],
+        "Status": campaign_row["status"],
+        "Daily Limit": "not-a-number",
+        "Per-Domain Limit": "5",
+        "Updated At": future,
+    }
+    result = sheets.apply_remote_campaigns(seeded, [bad_campaign], policy="merge")
+    assert result["errors"]
+    assert result["updated"] == 0
 
 
 def test_suppression_pull(seeded):

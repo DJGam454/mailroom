@@ -81,6 +81,38 @@ def test_repeat_send_blocked_across_campaigns(seeded):
         assert "already received" in sent.json()["detail"]
 
 
+def test_queue_filters_by_campaign(seeded):
+    with TestClient(app) as client:
+        pending = client.get("/api/approvals?page_size=1").json()["items"][0]
+        approved = client.post(f"/api/approvals/{pending['draft_id']}/approve", json={})
+        assert approved.status_code == 200
+        queue = client.get(f"/api/queue?campaign_id={pending['campaign_id']}").json()
+        assert queue["items"]
+        assert all(item["campaign_id"] == pending["campaign_id"] for item in queue["items"])
+        assert queue["counts"]["queued"] >= 1
+
+
+def test_send_now_retries_failed_item(seeded):
+    from app import db
+
+    with TestClient(app) as client:
+        pending = client.get("/api/approvals?page_size=1").json()["items"][0]
+        approved = client.post(f"/api/approvals/{pending['draft_id']}/approve", json={})
+        assert approved.status_code == 200
+        queue_id = approved.json()["queue"]["id"]
+        now = db.now_iso()
+        seeded.execute("UPDATE send_queue SET status = 'failed', attempts = 3 WHERE id = ?", (queue_id,))
+        seeded.execute("UPDATE drafts SET status = 'failed' WHERE id = ?", (pending["draft_id"],))
+        seeded.execute("UPDATE leads SET status = 'failed' WHERE id = ?", (pending["lead_id"],))
+        seeded.commit()
+        retried = client.post(f"/api/queue/{queue_id}/send-now")
+        assert retried.status_code == 200
+        assert retried.json()["ok"] is True
+        row = db.one(seeded, "SELECT status, attempts FROM send_queue WHERE id = ?", (queue_id,))
+        assert row["status"] == "sent"
+        assert row["attempts"] == 0
+
+
 def test_duplicate_queued_send_blocked(seeded):
     from app import db
 
