@@ -29,8 +29,12 @@ def pending_approvals(
         where += " AND d.campaign_id = ?"
         params.append(campaign_id)
     if q and q.strip():
-        like = f"%{q.strip()}%"
-        where += " AND (l.name LIKE ? OR l.email LIKE ? OR l.company LIKE ? OR l.role LIKE ?)"
+        escaped = q.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        like = f"%{escaped}%"
+        where += (
+            " AND (l.name LIKE ? ESCAPE '\\' OR l.email LIKE ? ESCAPE '\\' "
+            "OR l.company LIKE ? ESCAPE '\\' OR l.role LIKE ? ESCAPE '\\')"
+        )
         params.extend([like, like, like, like])
     total_row = db.one(
         conn,

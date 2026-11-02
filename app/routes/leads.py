@@ -39,8 +39,12 @@ def _where(campaign_id: int | None, status: str | None, q: str | None) -> tuple[
         clauses.append("l.status = ?")
         params.append(status)
     if q:
-        clauses.append("(l.name LIKE ? OR l.email LIKE ? OR l.company LIKE ? OR l.industry LIKE ?)")
-        like = f"%{q.strip()}%"
+        clauses.append(
+            "(l.name LIKE ? ESCAPE '\\' OR l.email LIKE ? ESCAPE '\\' "
+            "OR l.company LIKE ? ESCAPE '\\' OR l.industry LIKE ? ESCAPE '\\')"
+        )
+        escaped = q.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        like = f"%{escaped}%"
         params.extend([like, like, like, like])
     return ("WHERE " + " AND ".join(clauses)) if clauses else "", params
 
@@ -139,7 +143,9 @@ def get_lead(lead_id: int, conn=Conn) -> dict[str, Any]:
     draft = db.one(conn, "SELECT * FROM drafts WHERE lead_id = ?", (lead_id,))
     queue = db.one(
         conn,
-        "SELECT * FROM send_queue WHERE lead_id = ? ORDER BY id DESC LIMIT 1",
+        "SELECT q.*, m.email AS mailbox_email FROM send_queue q "
+        "LEFT JOIN mailboxes m ON m.id = q.mailbox_id "
+        "WHERE q.lead_id = ? ORDER BY q.id DESC LIMIT 1",
         (lead_id,),
     )
     message = db.one(
@@ -191,6 +197,11 @@ async def import_leads(
 
 @router.post("/drafts/{draft_id}/regenerate")
 def regenerate(draft_id: int, conn=Conn) -> dict[str, Any]:
+    existing = db.one(conn, "SELECT * FROM drafts WHERE id = ?", (draft_id,))
+    if not existing:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    if existing["status"] != "pending":
+        raise HTTPException(status_code=400, detail="Only pending drafts can be re-rendered")
     with conn:
         draft = drafting.regenerate_draft(conn, draft_id)
     if not draft:

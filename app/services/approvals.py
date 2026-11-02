@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from app import db
-from app.services import rotation
+from app.services import rotation, suppression
 
 
 class ApprovalError(Exception):
@@ -26,7 +26,7 @@ def approve_draft(
     lead = db.one(conn, "SELECT * FROM leads WHERE id = ?", (draft["lead_id"],))
     if not lead:
         raise ApprovalError("Lead not found")
-    if lead["status"] in {"denied", "suppressed", "sent", "replied"}:
+    if lead["status"] in {"denied", "suppressed", "sent", "replied", "bounced"}:
         raise ApprovalError(f"Lead is {lead['status']} and cannot be approved")
 
     try:
@@ -66,19 +66,16 @@ def deny_draft(
         raise ApprovalError("Lead not found")
 
     now = db.now_iso()
+    if suppress:
+        suppression.add(conn, lead["email"], reason.strip() or "operator denied")
     conn.execute(
         "UPDATE drafts SET status = 'denied', denied_at = ?, deny_reason = ?, updated_at = ? WHERE id = ?",
         (now, reason.strip(), now, draft_id),
     )
     conn.execute(
-        "UPDATE leads SET status = 'denied', updated_at = ? WHERE id = ?",
-        (now, lead["id"]),
+        "UPDATE leads SET status = ?, updated_at = ? WHERE id = ?",
+        ("suppressed" if suppress else "denied", now, lead["id"]),
     )
-    if suppress:
-        conn.execute(
-            "INSERT OR REPLACE INTO suppression(email, reason, created_at) VALUES (?, ?, ?)",
-            (lead["email"].strip().lower(), reason.strip() or "operator denied", now),
-        )
     db.audit(
         conn,
         "draft_denied",
@@ -100,8 +97,8 @@ def edit_draft(conn, draft_id: int, subject: str, body: str) -> dict[str, Any]:
     draft = db.one(conn, "SELECT * FROM drafts WHERE id = ?", (draft_id,))
     if not draft:
         raise ApprovalError("Draft not found")
-    if draft["status"] not in {"pending", "denied"}:
-        raise ApprovalError("Only pending or denied drafts can be edited")
+    if draft["status"] != "pending":
+        raise ApprovalError("Only pending drafts can be edited. A denied draft is terminal.")
     subject = subject.strip()
     body = body.strip()
     if not subject or not body:

@@ -7,9 +7,10 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
+from app import db
 from app.deps import Conn
 from app.schemas import SuppressionCreate
-from app import db
+from app.services import suppression
 
 router = APIRouter(prefix="/api/suppression", tags=["suppression"])
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -27,13 +28,8 @@ def add_suppression(payload: SuppressionCreate, conn=Conn) -> dict[str, Any]:
     if not EMAIL_RE.match(email):
         raise HTTPException(status_code=400, detail="Enter a valid email address.")
     with conn:
-        conn.execute(
-            "INSERT INTO suppression(email, reason, created_at) VALUES (?, ?, ?) "
-            "ON CONFLICT(email) DO UPDATE SET reason = excluded.reason",
-            (email, payload.reason.strip() or "Added by operator", db.now_iso()),
-        )
-        db.audit(conn, "suppression_added", "suppression", email, {"reason": payload.reason.strip()})
-    return {"ok": True, "item": db.one(conn, "SELECT * FROM suppression WHERE email = ?", (email,))}
+        result = suppression.add(conn, email, payload.reason)
+    return {"ok": True, "item": db.one(conn, "SELECT * FROM suppression WHERE email = ?", (email,)), **result}
 
 
 @router.delete("/{email}")

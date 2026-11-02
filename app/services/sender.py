@@ -190,7 +190,7 @@ def _check_eligible(conn, queue: dict[str, Any], draft: dict[str, Any], lead: di
         raise SendError(f"Queue item is {queue['status']}")
     if draft["status"] not in {"queued", "approved"}:
         raise SendError(f"Draft is {draft['status']}")
-    if lead["status"] in {"denied", "suppressed", "sent", "replied"}:
+    if lead["status"] in {"denied", "suppressed", "sent", "replied", "bounced"}:
         raise SendError(f"Lead is {lead['status']}")
     if campaign["status"] != "active":
         raise RetrySend("Campaign is not active")
