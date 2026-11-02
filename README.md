@@ -385,8 +385,10 @@ and campaign and expects:
 ```
 
 If the webhook is missing or returns an invalid draft, the existing draft is
-left unchanged and the UI shows the error. This is the connection point for the
-OpenCode or OpenBot agent team.
+left unchanged and the UI shows the error. The lead record, including the email
+address and notes, is sent to the URL you configure, so only point it at an
+agent you trust. This is the connection point for the OpenCode or OpenBot agent
+team.
 
 ## License
 
