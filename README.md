@@ -262,7 +262,8 @@ Full details: [docs/GOOGLE_SHEETS.md](docs/GOOGLE_SHEETS.md).
 - SMTP and Apps Script credentials are encrypted with Fernet.
 - The key is created at `data/secret.key` with mode 0600.
 - `data/`, `.env` and real lead exports are gitignored.
-- Suppression is checked at approval and again at send.
+- Suppression is checked at approval and again at send. Adding an address
+  denies its pending drafts and cancels its queued sends immediately.
 - A repeat send to the same address is blocked across campaigns, at approval and
   again at send time.
 - A denied draft is terminal.
@@ -282,12 +283,12 @@ app/
   seed.py              synthetic demo data
   crypto.py            local credential encryption
   routes/              JSON API
-  services/            drafting, rotation, sender, worker, warmup, sheets, DNS, importer
+  services/            drafting, rotation, sender, worker, warmup, sheets, suppression, DNS, importer
   static/              zero-build operator UI
 scripts/
   import_icp.py        import a real ICPExtractor pack locally
   sync_sheets.py       command-line Sheets sync
-tests/                 35 backend tests
+tests/                 40 backend tests
 integrations/
   apps_script/         optional Gmail bridge
 docs/
@@ -305,7 +306,7 @@ docs/
 make check
 ```
 
-This compiles the Python, checks the JavaScript syntax and runs the 35-test
+This compiles the Python, checks the JavaScript syntax and runs the 40-test
 pytest suite. GitHub Actions runs the same checks on every push and pull
 request.
 
@@ -326,6 +327,8 @@ GET  /api/domains
 GET  /api/deliverability
 GET  /api/queue
 POST /api/queue/tick
+POST /api/queue/{queue_id}/send-now
+POST /api/queue/{queue_id}/cancel
 GET  /api/warmup
 POST /api/warmup/start
 POST /api/warmup/pause
@@ -337,10 +340,15 @@ POST /api/sheets/configure
 POST /api/sheets/test
 POST /api/sheets/sync
 GET  /api/activity
+GET  /api/suppression
+POST /api/suppression
+DELETE /api/suppression/{email}
 GET  /api/settings
+PATCH /api/settings
 ```
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full surface.
+The live OpenAPI explorer is at <http://127.0.0.1:4600/docs>. See
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full surface and rules.
 
 ## Scope
 

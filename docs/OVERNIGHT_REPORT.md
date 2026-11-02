@@ -38,7 +38,7 @@ The app has:
   approval path.
 - Combined campaign plus warmup volume on the inbox and deliverability pages.
 - Activity log and CSV/JSON import.
-- 35 passing tests and a GitHub Actions workflow.
+- 40 passing tests and a GitHub Actions workflow.
 
 Real lead data is stored only in `data/mailroom.db`, which is gitignored. The
 public repo contains synthetic demo leads only.
@@ -92,6 +92,7 @@ are in `docs/GOOGLE_SHEETS.md`.
 - Real SMTP requires adding a real domain and mailbox and testing it.
 - Warmup is off by default. It is safe to start on the mock pool.
 - **Settings -> Pause all sending** is the emergency stop for campaigns.
+- Adding a suppression denies pending drafts and cancels queued sends.
 - A repeat send to the same address is blocked across campaigns.
 - Auto approval is not implemented and cannot be enabled from the UI or API.
 - Google Sheets has no live credentials yet; the code and tests are ready.
