@@ -64,6 +64,19 @@ def test_warmup_closed_pool_cycle(seeded):
     assert status["algorithm"]["cross_domain"] is True
 
 
+def test_profile_matures_after_ramp(seeded):
+    from datetime import datetime, timedelta, timezone
+
+    with db.transaction() as conn:
+        mailbox_id = db.one(conn, "SELECT id FROM mailboxes ORDER BY id LIMIT 1")["id"]
+        warmup.start(conn, [mailbox_id], daily_limit=10)
+        started = (datetime.now(timezone.utc) - timedelta(days=40)).isoformat()
+        conn.execute("UPDATE warmup_profiles SET started_at = ? WHERE mailbox_id = ?", (started, mailbox_id))
+    warmup.tick()
+    profile = db.one(seeded, "SELECT * FROM warmup_profiles WHERE mailbox_id = ?", (mailbox_id,))
+    assert profile["status"] == "active"
+
+
 def test_warmup_respects_daily_target(seeded):
     random.seed(4)
     with db.transaction() as conn:

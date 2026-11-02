@@ -27,6 +27,117 @@ def test_approval_api(seeded):
         assert response.json()["queue"]["status"] == "queued"
         queue = client.get("/api/queue").json()
         assert queue["items"]
+        queue_id = next(item["id"] for item in queue["items"] if item["draft_id"] == draft_id)
+        sent = client.post(f"/api/queue/{queue_id}/send-now")
+        assert sent.status_code == 200
+        recent = client.get("/api/queue?status=sent&limit=1").json()
+        assert recent["items"][0]["id"] == queue_id
+
+
+def test_repeat_send_blocked_across_campaigns(seeded):
+    from app import db
+
+    sent = db.one(
+        seeded,
+        "SELECT to_email, campaign_id FROM messages WHERE direction = 'outbound' AND status = 'sent' LIMIT 1",
+    )
+    assert sent
+    other = db.one(
+        seeded,
+        "SELECT id FROM campaigns WHERE id != ? AND status = 'active' LIMIT 1",
+        (sent["campaign_id"],),
+    )
+    assert other
+    now = db.now_iso()
+    lead_id = seeded.execute(
+        "INSERT INTO leads(campaign_id, name, email, status, created_at, updated_at) "
+        "VALUES (?, 'Repeat Contact', ?, 'pending_approval', ?, ?)",
+        (other["id"], sent["to_email"], now, now),
+    ).lastrowid
+    draft_id = seeded.execute(
+        "INSERT INTO drafts(lead_id, campaign_id, subject, body, status, created_at, updated_at) "
+        "VALUES (?, ?, 'Hello again', 'This should be blocked.', 'pending', ?, ?)",
+        (lead_id, other["id"], now, now),
+    ).lastrowid
+    seeded.commit()
+    with TestClient(app) as client:
+        response = client.post(f"/api/approvals/{draft_id}/approve", json={})
+        assert response.status_code == 400
+        assert "already emailed" in response.json()["detail"]
+
+        mailbox = db.one(
+            seeded,
+            "SELECT mailbox_id FROM messages WHERE direction = 'outbound' AND status = 'sent' LIMIT 1",
+        )
+        seeded.execute("UPDATE drafts SET status = 'queued' WHERE id = ?", (draft_id,))
+        queue_id = seeded.execute(
+            "INSERT INTO send_queue(draft_id, lead_id, campaign_id, mailbox_id, scheduled_at, status, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, 'queued', ?, ?)",
+            (draft_id, lead_id, other["id"], mailbox["mailbox_id"], now, now, now),
+        ).lastrowid
+        seeded.commit()
+        sent = client.post(f"/api/queue/{queue_id}/send-now")
+        assert sent.status_code == 400
+        assert "already received" in sent.json()["detail"]
+
+
+def test_duplicate_queued_send_blocked(seeded):
+    from app import db
+
+    with TestClient(app) as client:
+        pending = client.get("/api/approvals?page_size=1").json()["items"][0]
+        approved = client.post(f"/api/approvals/{pending['draft_id']}/approve", json={})
+        assert approved.status_code == 200
+        other = db.one(
+            seeded,
+            "SELECT id FROM campaigns WHERE id != ? AND status = 'active' LIMIT 1",
+            (pending["campaign_id"],),
+        )
+        now = db.now_iso()
+        lead_id = seeded.execute(
+            "INSERT INTO leads(campaign_id, name, email, status, created_at, updated_at) "
+            "VALUES (?, ?, ?, 'pending_approval', ?, ?)",
+            (other["id"], pending["name"], pending["email"], now, now),
+        ).lastrowid
+        draft_id = seeded.execute(
+            "INSERT INTO drafts(lead_id, campaign_id, subject, body, status, created_at, updated_at) "
+            "VALUES (?, ?, 'Duplicate', 'This should be blocked.', 'pending', ?, ?)",
+            (lead_id, other["id"], now, now),
+        ).lastrowid
+        seeded.commit()
+        duplicate = client.post(f"/api/approvals/{draft_id}/approve", json={})
+        assert duplicate.status_code == 400
+        assert "queued send" in duplicate.json()["detail"]
+
+
+def test_auto_approval_is_rejected(seeded):
+    with TestClient(app) as client:
+        response = client.post("/api/campaigns", json={"name": "Auto campaign", "approval_mode": "auto"})
+        assert response.status_code == 422
+
+
+def test_approval_search(seeded):
+    with TestClient(app) as client:
+        from urllib.parse import quote
+
+        first = client.get("/api/approvals?page_size=1").json()["items"][0]
+        found = client.get(f"/api/approvals?q={quote(first['email'])}").json()
+        assert found["total"] >= 1
+        assert any(item["email"] == first["email"] for item in found["items"])
+        missing = client.get("/api/approvals?q=no-such-person-xyz").json()
+        assert missing["total"] == 0
+
+
+def test_global_pause_blocks_approval(seeded):
+    with TestClient(app) as client:
+        saved = client.patch("/api/settings", json={"values": {"sending_paused": "1"}})
+        assert saved.status_code == 200
+        assert saved.json()["values"]["sending_paused"] == "1"
+        assert client.get("/api/overview").json()["stats"]["sending_paused"] is True
+        pending = client.get("/api/approvals?page_size=1").json()
+        response = client.post(f"/api/approvals/{pending['items'][0]['draft_id']}/approve", json={})
+        assert response.status_code == 400
+        assert "paused globally" in response.json()["detail"]
 
 
 def test_campaign_patch_api(seeded):
@@ -48,9 +159,13 @@ def test_campaign_and_leads_api(seeded):
         leads = client.get("/api/leads?page_size=5").json()
         assert leads["total"] >= 1
         assert leads["items"][0]["campaign_name"]
-        assert client.get("/api/mailboxes").status_code == 200
+        mailbox = client.get("/api/mailboxes").json()["items"][0]
+        assert "warmup_sent_today" in mailbox
+        assert mailbox["combined_sent_today"] == mailbox["sent_today"] + mailbox["warmup_sent_today"]
         assert client.get("/api/domains").status_code == 200
-        assert client.get("/api/deliverability").status_code == 200
+        deliverability = client.get("/api/deliverability").json()
+        assert "warmup_sent_today" in deliverability["mailboxes"][0]
+        assert "warmup_sent_today" in deliverability["domains"][0]
         assert client.get("/api/activity").status_code == 200
         assert client.get("/api/queue").status_code == 200
         assert client.get("/api/sheets/status").status_code == 200
