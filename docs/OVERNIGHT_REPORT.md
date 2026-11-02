@@ -32,8 +32,9 @@ The app has:
   replies and separate caps.
 - Google Sheets two-way sync for leads and campaigns, suppression union and a
   read-only warmup tab, with timestamp and content-hash conflict detection.
+- Suppression management page and editable campaign settings.
 - Activity log and CSV/JSON import.
-- 23 passing tests and a GitHub Actions workflow.
+- 25 passing tests and a GitHub Actions workflow.
 
 Real lead data is stored only in `data/mailroom.db`, which is gitignored. The
 public repo contains synthetic demo leads only.

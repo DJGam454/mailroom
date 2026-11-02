@@ -86,6 +86,14 @@ Actions:
 The demo data has a few sent and queued examples. The real imported campaigns
 start with every draft pending.
 
+The **Suppression** page is the permanent stop list. A denied draft only
+suppresses an address when **Never contact this address again** is ticked.
+Suppression blocks queueing and is checked again at send time.
+
+The gear button on a campaign card opens campaign settings for the name,
+status, limits, window, timezone and rotation. Auto-send is scaffolded but not
+active; all sends still require approval.
+
 ## 4. Rotation and caps
 
 Every mailbox has:

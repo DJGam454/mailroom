@@ -239,8 +239,9 @@ Full details: [docs/GOOGLE_SHEETS.md](docs/GOOGLE_SHEETS.md).
 | --- | --- |
 | Overview | approvals, queue, inbox health and recent activity |
 | Approvals | person card, email preview, approve or deny |
-| Campaigns | separate lead pools and limits |
+| Campaigns | separate lead pools, limits and editable campaign settings |
 | Leads | the single sheet: search, filter, import, export |
+| Suppression | permanent stop addresses, add and remove |
 | Inboxes & domains | connections, caps and DNS checks |
 | Deliverability | volume and DNS state |
 | Warmup | closed-pool ramp, pairs, health and engagement |
@@ -278,7 +279,7 @@ app/
 scripts/
   import_icp.py        import a real ICPExtractor pack locally
   sync_sheets.py       command-line Sheets sync
-tests/                 23 backend tests
+tests/                 25 backend tests
 integrations/
   apps_script/         optional Gmail bridge
 docs/
@@ -296,7 +297,7 @@ docs/
 make check
 ```
 
-This compiles the Python, checks the JavaScript syntax and runs the 23-test
+This compiles the Python, checks the JavaScript syntax and runs the 25-test
 pytest suite. GitHub Actions runs the same checks on every push and pull
 request.
 

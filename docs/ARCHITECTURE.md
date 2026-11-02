@@ -284,6 +284,9 @@ POST   /api/sheets/test
 POST   /api/sheets/sync
 
 GET    /api/activity
+GET    /api/suppression
+POST   /api/suppression
+DELETE /api/suppression/{email}
 GET    /api/settings
 PATCH  /api/settings
 ```
