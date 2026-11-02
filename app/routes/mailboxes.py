@@ -27,7 +27,7 @@ def _mailbox_rows(conn) -> list[dict[str, Any]]:
         SELECT m.*, d.name AS domain_name, d.status AS domain_status,
                COALESCE(u.sent, 0) AS sent_today,
                (SELECT COUNT(*) FROM warmup_messages wm
-                 WHERE wm.mailbox_id = m.id AND wm.kind = 'initial'
+                 WHERE wm.mailbox_id = m.id AND wm.kind IN ('initial', 'reply')
                    AND date(wm.sent_at, 'localtime') = date('now', 'localtime')) AS warmup_sent_today,
                (SELECT COUNT(*) FROM messages msg
                  WHERE msg.mailbox_id = m.id AND msg.sent_at >= datetime('now', '-1 hour')) AS sent_hour,
