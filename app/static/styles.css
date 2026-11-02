@@ -532,7 +532,7 @@ table.leads-table { table-layout: fixed; min-width: 0; }
   border-top: 1px solid var(--line); background: #fbfbfd;
   position: sticky; bottom: 0;
 }
-.action-bar .hint { color: var(--muted-2); font-size: 10.5px; margin-right: auto; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.action-bar .hint { color: var(--muted-2); font-size: 10.5px; margin-right: auto; display: flex; align-items: center; gap: 5px; flex-wrap: nowrap; white-space: nowrap; }
 .action-bar .btn { min-width: 100px; }
 .assignment {
   display: flex; align-items: center; gap: 8px; margin-top: 12px; padding: 8px 10px;

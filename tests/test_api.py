@@ -34,3 +34,29 @@ def test_campaign_and_leads_api(seeded):
         leads = client.get("/api/leads?page_size=5").json()
         assert leads["total"] >= 1
         assert leads["items"][0]["campaign_name"]
+        assert client.get("/api/mailboxes").status_code == 200
+        assert client.get("/api/domains").status_code == 200
+        assert client.get("/api/deliverability").status_code == 200
+        assert client.get("/api/activity").status_code == 200
+        assert client.get("/api/queue").status_code == 200
+        settings = client.get("/api/settings").json()["values"]
+        assert settings["sender_name"]
+
+
+def test_csv_import_upload(seeded):
+    with TestClient(app) as client:
+        campaign_id = seeded.execute("SELECT id FROM campaigns ORDER BY id LIMIT 1").fetchone()[0]
+        csv_body = (
+            "Lead ID,Doctor Name,Contact Name,Email,Industry,Service Assigned,Notes,Website\n"
+            "1,Upload Dental,,upload@example.test,Dental clinic,Website Development,"
+            "\"140 reviews, 4.8* | Email grade: B\",https://example.test\n"
+        )
+        response = client.post(
+            "/api/leads/import",
+            data={"campaign_id": str(campaign_id)},
+            files={"file": ("upload.csv", csv_body, "text/csv")},
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["imported"] == 1
+        assert body["drafts"] == 1

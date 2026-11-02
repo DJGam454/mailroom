@@ -29,7 +29,7 @@ The app has:
 - Mock, SMTP and Google Apps Script transports.
 - MX, SPF, DKIM and DMARC checks.
 - Activity log and CSV/JSON import.
-- 12 passing tests and a GitHub Actions workflow.
+- 13 passing tests and a GitHub Actions workflow.
 
 Real lead data is stored only in `data/mailroom.db`, which is gitignored. The
 public repo contains synthetic demo leads only.

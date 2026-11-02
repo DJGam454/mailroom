@@ -236,7 +236,7 @@ app/
   static/              zero-build operator UI
 scripts/
   import_icp.py        import a real ICPExtractor pack locally
-tests/                 12 backend tests
+tests/                 13 backend tests
 integrations/
   apps_script/         optional Gmail bridge
 docs/

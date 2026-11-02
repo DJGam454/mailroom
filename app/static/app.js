@@ -829,7 +829,7 @@ function renderApprovalDetail() {
     </div>
 
     <div class="action-bar">
-      <div class="hint"><span class="kbd">j</span><span class="kbd">k</span> next/prev <span class="kbd">a</span> approve <span class="kbd">d</span> deny</div>
+      <div class="hint"><span class="kbd">j</span><span class="kbd">k</span> move <span class="kbd">a</span> approve <span class="kbd">d</span> deny</div>
       <button class="btn danger" data-action="deny" data-id="${item.draft_id}">${icon("x", 14)} Deny</button>
       <button class="btn" data-action="edit-draft" data-id="${item.draft_id}">${icon("edit", 14)} Edit</button>
       <button class="btn success" data-action="approve" data-id="${item.draft_id}">${icon("check", 14)} Approve & queue</button>
