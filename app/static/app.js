@@ -1090,6 +1090,7 @@ function openCampaignModal() {
     footer: `<button class="btn" data-action="close-modal">Cancel</button><button class="btn primary" type="submit" form="modal-form">Create campaign</button>`,
     onSubmit: async (formData) => {
       const days = formData.getAll("days").map(Number);
+      if (!days.length) throw new Error("Pick at least one working day.");
       const payload = {
         name: formData.get("name"),
         status: formData.get("status"),
@@ -1151,6 +1152,7 @@ function openCampaignSettings(id) {
     footer: `<button class="btn" data-action="close-modal">Cancel</button><button class="btn primary" type="submit" form="modal-form">Save campaign</button>`,
     onSubmit: async (formData) => {
       const days = formData.getAll("days").map(Number);
+      if (!days.length) throw new Error("Pick at least one working day.");
       await api(`/campaigns/${id}`, {
         method: "PATCH",
         body: JSON.stringify({
@@ -1761,6 +1763,7 @@ function openWarmupSettings() {
           <div class="field"><label for="wu-window-start">Window start</label><input class="input" id="wu-window-start" name="warmup_window_start" type="time" value="${esc(settings.window_start || "00:00")}" /></div>
           <div class="field"><label for="wu-window-end">Window end</label><input class="input" id="wu-window-end" name="warmup_window_end" type="time" value="${esc(settings.window_end || "23:59")}" /></div>
           <div class="field"><label for="wu-max-tick">Max sends per tick</label><input class="input" id="wu-max-tick" name="warmup_max_sends_per_tick" type="number" min="1" value="${esc(settings.max_per_tick || 10)}" /></div>
+          <div class="field full"><label for="wu-ramp">Ramp (comma-separated sends per mailbox per day)</label><input class="input" id="wu-ramp" name="warmup_ramp" value="${esc((settings.ramp || []).join(","))}" /></div>
         </div>
         <label class="checkline mt-12"><input type="checkbox" name="warmup_weekdays_only" ${settings.weekdays_only ? "checked" : ""}/> Weekdays only</label>
         <div class="notice mt-12">For real domains, raise the gap to 5-15 minutes and keep 5-10 sends per mailbox per day. The demo uses short gaps so you can see activity immediately.</div>
@@ -1779,6 +1782,7 @@ function openWarmupSettings() {
         warmup_window_start: formData.get("warmup_window_start"),
         warmup_window_end: formData.get("warmup_window_end"),
         warmup_max_sends_per_tick: formData.get("warmup_max_sends_per_tick"),
+        warmup_ramp: formData.get("warmup_ramp"),
         warmup_weekdays_only: formData.get("warmup_weekdays_only") === "on" ? "1" : "0",
       };
       await api("/warmup/settings", { method: "PATCH", body: JSON.stringify({ values }) });

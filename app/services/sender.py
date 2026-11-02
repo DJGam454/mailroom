@@ -151,7 +151,7 @@ def _dispatch(message: EmailMessage, mailbox: dict[str, Any]) -> str:
     return dispatch_message(message, mailbox)
 
 
-def mark_read_imap(mailbox: dict[str, Any], message_id: str) -> bool:
+def mark_read_imap(mailbox: dict[str, Any], message_id: str, important: bool = True) -> bool:
     """Best-effort IMAP read/flag for warmup engagement.
 
     Mock mailboxes and missing IMAP settings return False. The caller treats
@@ -172,8 +172,9 @@ def mark_read_imap(mailbox: dict[str, Any], message_id: str) -> bool:
             status, data = client.search(None, "HEADER", "Message-ID", search_id)
             if status != "OK" or not data or not data[0]:
                 return False
+            flags = r"(\Seen \Flagged)" if important else r"(\Seen)"
             for uid in data[0].split():
-                client.store(uid, "+FLAGS", r"(\Seen \Flagged)")
+                client.store(uid, "+FLAGS", flags)
             return True
         finally:
             try:

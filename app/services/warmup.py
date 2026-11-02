@@ -456,7 +456,11 @@ def _process(queue_id: int) -> dict[str, Any]:
                 return {"ok": False, "error": "No initial message"}
             if random.random() <= settings["open_rate"]:
                 conn.execute("UPDATE warmup_messages SET read_at = ? WHERE id = ?", (now, initial["id"]))
-                sender.mark_read_imap(target, initial["message_id"] or "")
+                sender.mark_read_imap(
+                    target,
+                    initial["message_id"] or "",
+                    important=random.random() <= settings["important_rate"],
+                )
                 db.audit(conn, "warmup_opened", "warmup_thread", thread["id"], {"mailbox": target["email"]})
             conn.execute("UPDATE warmup_threads SET last_activity_at = ? WHERE id = ?", (now, thread["id"]))
             _mark_queue(conn, queue_id, "sent")
@@ -663,6 +667,7 @@ def update_settings(conn, values: dict[str, Any]) -> dict[str, Any]:
         "warmup_window_end",
         "warmup_weekdays_only",
         "warmup_max_sends_per_tick",
+        "warmup_ramp",
     }
     clean = {}
     for key, value in values.items():
