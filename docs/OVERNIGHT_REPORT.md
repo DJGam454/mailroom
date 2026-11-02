@@ -33,8 +33,12 @@ The app has:
 - Google Sheets two-way sync for leads and campaigns, suppression union and a
   read-only warmup tab, with timestamp and content-hash conflict detection.
 - Suppression management page and editable campaign settings.
+- Approval search, recently sent table and edit-from-lead.
+- Global pause switch, repeat-send protection across campaigns, and no auto
+  approval path.
+- Combined campaign plus warmup volume on the inbox and deliverability pages.
 - Activity log and CSV/JSON import.
-- 25 passing tests and a GitHub Actions workflow.
+- 31 passing tests and a GitHub Actions workflow.
 
 Real lead data is stored only in `data/mailroom.db`, which is gitignored. The
 public repo contains synthetic demo leads only.
@@ -54,6 +58,10 @@ public repo contains synthetic demo leads only.
    and open/reply tasks processed.
 10. Unit-tested Sheets row building, timestamp parsing, conflict handling,
     suppression union and fake-tab round trips.
+11. Confirmed the global pause blocks approval and the worker, and confirmed a
+    duplicate address is blocked at approval and at send time.
+12. Ran a 25-mailbox warmup simulation: 50 cross-domain threads, 50 opens, 50
+    replies, 100 mock files, no same-domain pairs and no failed tasks.
 
 ## How to use it in the morning
 
@@ -83,6 +91,9 @@ are in `docs/GOOGLE_SHEETS.md`.
 - `data/warmup_outbox/` contains warmup mock messages.
 - Real SMTP requires adding a real domain and mailbox and testing it.
 - Warmup is off by default. It is safe to start on the mock pool.
+- **Settings -> Pause all sending** is the emergency stop for campaigns.
+- A repeat send to the same address is blocked across campaigns.
+- Auto approval is not implemented and cannot be enabled from the UI or API.
 - Google Sheets has no live credentials yet; the code and tests are ready.
 - Reply ingestion and the Unibox are still deferred.
 

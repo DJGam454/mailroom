@@ -84,9 +84,10 @@ pending -> approved -> queued -> sending -> sent
 6. The worker sends only due queue items whose campaign is active.
 7. Every transition writes an activity row.
 
-`approval_mode = auto` is present for later automation. When enabled, a new
-draft is approved automatically and queued. Manual is the default and the UI
-shows a warning when auto is selected.
+`approval_mode` is kept in the schema for a future automation phase, but the
+API accepts only `manual` and the database normalizes any old value to
+`manual`. Auto-send is deliberately not implemented: no sheet edit, campaign
+setting or API call can bypass the human approval step.
 
 ## 4. Rotation and scheduling
 
@@ -99,6 +100,8 @@ Eligibility:
 - sends in the last hour `< mailbox.hourly_limit`
 - domain sends today `< campaign.per_domain_limit`
 - campaign is active and inside its window
+- global sending is not paused
+- the recipient has no prior Mailroom send and no other queued send
 
 Selection:
 

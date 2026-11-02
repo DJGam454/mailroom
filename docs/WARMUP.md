@@ -29,8 +29,10 @@ a full reputation network.
 - Sends short, varied plain-text emails.
 - Schedules opens and replies separately.
 - Records opens and replies in the local database.
-- Best-effort IMAP `\Seen \Flagged` when an IMAP profile exists.
+- Best-effort IMAP `\Seen` on open, plus `\Flagged` on the configured
+  important-rate share.
 - Keeps warmup traffic separate from campaign traffic and campaign caps.
+- Moves a profile from `ramping` to `active` after the configured ramp ends.
 - Exposes a health score based on activity and engagement, not provider
   reputation.
 
@@ -92,8 +94,8 @@ or start one mailbox at a time.
 
 Useful controls:
 
-- **Settings**: daily limit, domain limit, reply %, open %, pair cooldown,
-  gap range, window, weekdays only, max sends per tick.
+- **Settings**: daily limit, domain limit, reply %, open %, important %, ramp,
+  pair cooldown, gap range, window, weekdays only, max sends per tick.
 - **Run tick**: force a scheduling and processing pass.
 - **Pause all / Pause**: stop new sends while keeping history.
 - **Start**: resume the ramp.
@@ -108,7 +110,9 @@ The demo mailboxes are mock, so warmup writes `.eml` files to
 - A real SMTP/IMAP mailbox is connected and tested.
 - Start one domain at a time, or stagger domains by 7-14 days.
 - Start at 2-5 warmup sends per mailbox per day.
-- Keep total mailbox volume under 30 per day including campaigns.
+- Keep total mailbox volume under 30 per day including campaigns. The Inboxes
+  page shows campaign and warmup sends together; the caps are separate counters
+  but the provider quota is shared.
 - Raise the gap to 5-15 minutes.
 - Add external seed inboxes for diversity where possible.
 - Keep warmup running after campaigns start.

@@ -78,7 +78,8 @@ The Approvals page shows one card per email:
 - the rotation pool that will assign a mailbox
 
 You can approve and queue, deny, edit the copy, re-render from the template, or
-bulk approve. Keyboard shortcuts: `j` / `k` move, `a` approve, `d` deny.
+bulk approve. Search the queue by name, email, company or role. Keyboard
+shortcuts: `j` / `k` move, `a` approve, `d` deny, `e` edit.
 
 Approval is server-side. A denied draft can never be picked up by the worker.
 Every transition is written to the activity log.
@@ -95,6 +96,8 @@ Filters:
 - under the mailbox daily and hourly limit
 - under the campaign per-domain limit
 - recipient is not suppressed
+- recipient has not already received a Mailroom send in any campaign
+- global sending is not paused in Settings
 
 Strategies:
 
@@ -238,14 +241,14 @@ Full details: [docs/GOOGLE_SHEETS.md](docs/GOOGLE_SHEETS.md).
 | Page | Purpose |
 | --- | --- |
 | Overview | approvals, queue, inbox health and recent activity |
-| Approvals | person card, email preview, approve or deny |
+| Approvals | person card, email preview, search, approve or deny |
 | Campaigns | separate lead pools, limits and editable campaign settings |
 | Leads | the single sheet: search, filter, import, export |
 | Suppression | permanent stop addresses, add and remove |
 | Inboxes & domains | connections, caps and DNS checks |
 | Deliverability | volume and DNS state |
 | Warmup | closed-pool ramp, pairs, health and engagement |
-| Send queue | scheduled sends, mailbox, retry state |
+| Send queue | scheduled sends, recently sent, mailbox, retry state |
 | Activity | append-only audit trail |
 | Google Sheets | service account, tabs, pull/push/sync and conflicts |
 | Settings | sender identity, safety switches, agent hook |
@@ -259,8 +262,12 @@ Full details: [docs/GOOGLE_SHEETS.md](docs/GOOGLE_SHEETS.md).
 - The key is created at `data/secret.key` with mode 0600.
 - `data/`, `.env` and real lead exports are gitignored.
 - Suppression is checked at approval and again at send.
+- A repeat send to the same address is blocked across campaigns, at approval and
+  again at send time.
 - A denied draft is terminal.
 - A stale approval cannot send after a mailbox is paused or a cap is reached.
+- **Pause all sending** in Settings blocks new approvals and stops the campaign
+  queue without touching warmup history.
 
 Read [docs/OPERATIONS.md](docs/OPERATIONS.md) before connecting a real inbox.
 
@@ -279,7 +286,7 @@ app/
 scripts/
   import_icp.py        import a real ICPExtractor pack locally
   sync_sheets.py       command-line Sheets sync
-tests/                 25 backend tests
+tests/                 31 backend tests
 integrations/
   apps_script/         optional Gmail bridge
 docs/
@@ -297,7 +304,7 @@ docs/
 make check
 ```
 
-This compiles the Python, checks the JavaScript syntax and runs the 25-test
+This compiles the Python, checks the JavaScript syntax and runs the 31-test
 pytest suite. GitHub Actions runs the same checks on every push and pull
 request.
 

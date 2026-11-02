@@ -80,8 +80,13 @@ Actions:
 - **Edit** changes the subject or body. The draft returns to pending and must be
   approved again.
 - **Re-render** rebuilds the draft from the campaign template.
-- Keyboard: `j` / `k` move, `a` approve, `d` deny.
+- Search by name, email, company or role with the field above the queue.
+- Keyboard: `j` / `k` move, `a` approve, `d` deny, `e` edit.
 - Bulk approve or deny with the checkboxes.
+
+Approval is blocked when the recipient already received a Mailroom send in any
+campaign, when the address is suppressed, or when **Pause all sending** is on.
+The worker repeats the same checks before delivery.
 
 The demo data has a few sent and queued examples. The real imported campaigns
 start with every draft pending.
@@ -121,8 +126,15 @@ mailbox.next_available_at = scheduled_at + random gap
 ```
 
 At send time it re-checks campaign status, mailbox status, domain status,
-suppression, the window, daily limits and hourly limits. A paused mailbox
-cannot send a stale approval.
+suppression, repeat contact, the window, daily limits and hourly limits. A
+paused mailbox cannot send a stale approval.
+
+**Inboxes & domains** shows campaign and warmup volume together. The campaign
+cap and the warmup cap are separate counters, but both consume the provider's
+quota. Keep the combined number under the real provider limit.
+
+**Settings -> Pause all sending** is the emergency stop. It blocks new
+approvals and stops campaign sends. Warmup has its own pause controls.
 
 ## 5. Connect a real domain and inbox
 
