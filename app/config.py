@@ -5,7 +5,10 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 ROOT = Path(__file__).resolve().parent.parent
+load_dotenv(ROOT / ".env", override=False)
 DATA_DIR = Path(os.getenv("MAILROOM_DATA_DIR", ROOT / "data"))
 DB_PATH = Path(os.getenv("MAILROOM_DB", DATA_DIR / "mailroom.db"))
 OUTBOX_DIR = DATA_DIR / "outbox"
@@ -18,7 +21,7 @@ WORKER_ENABLED = os.getenv("MAILROOM_WORKER", "1").lower() not in {"0", "false",
 WORKER_INTERVAL = float(os.getenv("MAILROOM_WORKER_INTERVAL", "2"))
 WARMUP_WORKER_ENABLED = os.getenv("MAILROOM_WARMUP_WORKER", "1").lower() not in {"0", "false", "no"}
 WARMUP_WORKER_INTERVAL = float(os.getenv("MAILROOM_WARMUP_INTERVAL", "5"))
-APP_VERSION = "0.6.12"
+APP_VERSION = "0.6.13"
 
 
 def ensure_data_dirs() -> None:

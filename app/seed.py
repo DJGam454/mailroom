@@ -271,6 +271,7 @@ def seed_demo(reset: bool = False) -> dict:
                 "mailboxes",
                 "domains",
                 "suppression",
+                "sheet_sync_state",
                 "activity",
             ):
                 conn.execute(f"DELETE FROM {table}")
