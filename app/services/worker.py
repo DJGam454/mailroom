@@ -211,6 +211,8 @@ def cancel(queue_id: int, reason: str = "Cancelled by operator") -> dict:
             return {"ok": False, "error": "Queue item not found"}
         if queue["status"] == "sent":
             return {"ok": False, "error": "Already sent"}
+        if queue["status"] == "leased":
+            return {"ok": False, "error": "Item is currently sending; wait for the result"}
         now = db.now_iso()
         conn.execute(
             "UPDATE send_queue SET status = 'cancelled', last_error = ?, updated_at = ? WHERE id = ?",

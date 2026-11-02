@@ -617,7 +617,7 @@ async function renderOverview(token) {
   const campaigns = data.campaigns || [];
   const queue = data.queue_preview || [];
   const activity = data.activity || [];
-  const daily = data.daily || [];
+  const daily = buildDailySeries(data.daily || []);
   const maxDaily = Math.max(1, ...daily.map((item) => Number(item.sent || 0)));
 
   const topCampaigns = campaigns.slice(0, 3);
@@ -657,7 +657,7 @@ async function renderOverview(token) {
         <div class="stat-value">${fmtNumber(stats.sent_today)}</div>
         <div class="stat-foot">${fmtNumber(stats.sent_total)} sent all time</div>
         <div class="stat-icon green">${icon("checkCircle", 15)}</div>
-        <div class="spark">${daily.length ? daily.slice(-7).map((item) => `<span class="${Number(item.sent) ? "on" : ""}" style="height:${Math.max(3, Math.round((Number(item.sent || 0) / maxDaily) * 24))}px"></span>`).join("") : '<span></span><span></span><span></span><span></span><span></span><span></span><span></span>'}</div>
+        <div class="spark">${daily.map((item) => `<span class="${Number(item.sent) ? "on" : ""}" style="height:${Math.max(3, Math.round((Number(item.sent || 0) / maxDaily) * 24))}px"></span>`).join("")}</div>
       </div>
       <div class="card stat-card">
         <div class="stat-label">${icon("inboxes", 14)} Active inboxes</div>
@@ -898,7 +898,7 @@ function renderApprovalDetail() {
       <div class="email-preview">
         <div class="email-head">
           <div class="email-subject">${esc(item.subject)}</div>
-          <div class="email-meta"><span>To: ${esc(item.email)}</span><span>From: rotation pool</span><span>${esc(item.campaign_name)}</span></div>
+          <div class="email-meta"><span>To: ${esc(item.email)}</span><span>From: ${esc(pool.suggested || "rotation pool")}</span><span>${esc(item.campaign_name)}</span></div>
         </div>
         <div class="email-body">${esc(item.body)}</div>
       </div>
@@ -1752,7 +1752,11 @@ function buildDailySeries(rows) {
   for (let offset = 6; offset >= 0; offset -= 1) {
     const date = new Date();
     date.setDate(date.getDate() - offset);
-    const key = date.toISOString().slice(0, 10);
+    const key = [
+      date.getFullYear(),
+      String(date.getMonth() + 1).padStart(2, "0"),
+      String(date.getDate()).padStart(2, "0"),
+    ].join("-");
     const row = map.get(key) || {};
     result.push({ date: key, sent: Number(row.sent || 0), label: new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(date) });
   }
@@ -2121,7 +2125,7 @@ async function renderQueue(token) {
     <div class="card mt-16">
       <div class="card-head"><div><div class="card-title">Upcoming sends</div><div class="card-sub">Each row has a mailbox reservation and a send time.</div></div><div class="right"><button class="btn sm" data-action="queue-tick">${icon("zap", 13)} Tick worker</button></div></div>
       ${items.length ? `<div class="table-wrap"><table class="table"><thead><tr><th>Scheduled</th><th>Person</th><th>Campaign</th><th>Mailbox</th><th>Status</th><th>Attempts</th><th></th></tr></thead><tbody>${items.map((item) => `
-        <tr><td class="cell-nowrap">${esc(fmtDate(item.scheduled_at))}<div class="sub">${esc(fmtRelative(item.scheduled_at))}</div></td><td><div class="cell-person"><div class="avatar sm ${avatarTone(item.name)}">${esc(initials(item.name))}</div><div><div class="name">${esc(item.name)}</div><div class="sub">${esc(item.company)} · ${esc(item.email)}</div></div></div></td><td class="cell-muted">${esc(item.campaign_name)}</td><td class="cell-muted mono" style="font-size:10.5px">${esc(item.mailbox_email)}</td><td>${statusChip(item.status)}</td><td class="cell-muted">${fmtNumber(item.attempts)}</td><td class="cell-actions">${item.status !== "sent" ? `<button class="btn xs" data-action="send-now" data-id="${item.id}">Send now</button><button class="btn xs ghost" data-action="cancel-queue" data-id="${item.id}">Cancel</button>` : ""}</td></tr>
+        <tr><td class="cell-nowrap">${esc(fmtDate(item.scheduled_at))}<div class="sub">${esc(fmtRelative(item.scheduled_at))}</div></td><td><div class="cell-person"><div class="avatar sm ${avatarTone(item.name)}">${esc(initials(item.name))}</div><div><div class="name">${esc(item.name)}</div><div class="sub">${esc(item.company)} · ${esc(item.email)}</div></div></div></td><td class="cell-muted">${esc(item.campaign_name)}</td><td class="cell-muted mono" style="font-size:10.5px">${esc(item.mailbox_email)}</td><td>${statusChip(item.status)}</td><td class="cell-muted">${fmtNumber(item.attempts)}</td><td class="cell-actions">${["queued", "failed"].includes(item.status) ? `<button class="btn xs" data-action="send-now" data-id="${item.id}">Send now</button><button class="btn xs ghost" data-action="cancel-queue" data-id="${item.id}">Cancel</button>` : ""}</td></tr>
       `).join("")}</tbody></table></div>` : emptyState("Queue is empty", "Approve a draft to reserve a mailbox and a send slot.", "queue")}
     </div>
     <div class="card mt-16">

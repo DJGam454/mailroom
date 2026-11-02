@@ -96,6 +96,20 @@ def test_queue_filters_by_campaign(seeded):
         assert queue["sending_paused"] is False
 
 
+def test_leased_item_cannot_be_cancelled(seeded):
+    from app import db
+
+    with TestClient(app) as client:
+        pending = client.get("/api/approvals?page_size=1").json()["items"][0]
+        approved = client.post(f"/api/approvals/{pending['draft_id']}/approve", json={})
+        queue_id = approved.json()["queue"]["id"]
+        seeded.execute("UPDATE send_queue SET status = 'leased' WHERE id = ?", (queue_id,))
+        seeded.commit()
+        cancelled = client.post(f"/api/queue/{queue_id}/cancel")
+        assert cancelled.status_code == 400
+        assert "currently sending" in cancelled.json()["detail"]
+
+
 def test_send_now_retries_failed_item(seeded):
     from app import db
 
