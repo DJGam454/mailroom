@@ -140,9 +140,10 @@ suppression, repeat contact, the window, the campaign total for its local day,
 mailbox daily and hourly limits and the per-domain limit. A paused mailbox or a
 campaign that already hit its daily cap cannot send a stale approval.
 
-**Inboxes & domains** shows campaign and warmup volume together. The campaign
-cap and the warmup cap are separate counters, but both consume the provider's
-quota. Keep the combined number under the real provider limit.
+**Inboxes & domains** shows campaign and warmup volume together, including
+warmup replies. The campaign cap and the warmup cap are separate counters, but
+both consume the provider's quota. Keep the combined number under the real
+provider limit.
 
 Daily counters use the Mac's local date. Keep the Mac timezone aligned with the
 default timezone in Settings so the counter reset matches the campaign window.
