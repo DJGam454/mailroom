@@ -192,3 +192,76 @@ CREATE INDEX IF NOT EXISTS idx_messages_lead ON messages(lead_id);
 CREATE INDEX IF NOT EXISTS idx_messages_mailbox ON messages(mailbox_id, sent_at);
 CREATE INDEX IF NOT EXISTS idx_usage_date ON mailbox_usage_daily(date);
 CREATE INDEX IF NOT EXISTS idx_activity_created ON activity(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS warmup_profiles (
+    mailbox_id INTEGER PRIMARY KEY REFERENCES mailboxes(id) ON DELETE CASCADE,
+    enabled INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'off',
+    started_at TEXT,
+    daily_limit INTEGER NOT NULL DEFAULT 10,
+    reply_rate REAL NOT NULL DEFAULT 0.30,
+    open_rate REAL NOT NULL DEFAULT 0.80,
+    important_rate REAL NOT NULL DEFAULT 0.30,
+    last_run_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
+CREATE TABLE IF NOT EXISTS warmup_threads (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_mailbox_id INTEGER NOT NULL REFERENCES mailboxes(id) ON DELETE CASCADE,
+    target_mailbox_id INTEGER NOT NULL REFERENCES mailboxes(id) ON DELETE CASCADE,
+    subject TEXT NOT NULL,
+    body TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open',
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    last_activity_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS warmup_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    thread_id INTEGER NOT NULL REFERENCES warmup_threads(id) ON DELETE CASCADE,
+    mailbox_id INTEGER NOT NULL REFERENCES mailboxes(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL DEFAULT 'initial',
+    direction TEXT NOT NULL DEFAULT 'outbound',
+    from_email TEXT NOT NULL,
+    to_email TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    body TEXT NOT NULL,
+    message_id TEXT,
+    status TEXT NOT NULL DEFAULT 'sent',
+    sent_at TEXT,
+    read_at TEXT,
+    replied_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
+CREATE TABLE IF NOT EXISTS warmup_queue (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    thread_id INTEGER NOT NULL REFERENCES warmup_threads(id) ON DELETE CASCADE,
+    mailbox_id INTEGER NOT NULL REFERENCES mailboxes(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    scheduled_at TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'queued',
+    attempts INTEGER NOT NULL DEFAULT 0,
+    lease_until TEXT,
+    last_error TEXT,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_warmup_profiles_status ON warmup_profiles(status);
+CREATE INDEX IF NOT EXISTS idx_warmup_threads_source ON warmup_threads(source_mailbox_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_warmup_threads_target ON warmup_threads(target_mailbox_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_warmup_messages_mailbox ON warmup_messages(mailbox_id, sent_at);
+CREATE INDEX IF NOT EXISTS idx_warmup_queue_due ON warmup_queue(status, scheduled_at);
+
+CREATE TABLE IF NOT EXISTS sheet_sync_state (
+    sheet_name TEXT NOT NULL,
+    entity_key TEXT NOT NULL,
+    local_updated_at TEXT,
+    remote_updated_at TEXT,
+    last_synced_at TEXT,
+    content_hash TEXT,
+    PRIMARY KEY (sheet_name, entity_key)
+);

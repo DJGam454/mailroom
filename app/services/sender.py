@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import imaplib
 import json
 import smtplib
 import ssl
@@ -54,11 +55,13 @@ def _build_message(draft: dict[str, Any], lead: dict[str, Any], mailbox: dict[st
     return message
 
 
-def _dispatch_mock(message: EmailMessage, mailbox: dict[str, Any]) -> str:
+def _dispatch_mock(message: EmailMessage, mailbox: dict[str, Any], outbox_dir: Path | None = None) -> str:
     config.ensure_data_dirs()
     message_id = str(message["Message-ID"])
     safe_id = message_id.strip("<>").replace("@", "_at_").replace(".", "_")
-    path: Path = config.OUTBOX_DIR / f"{safe_id}.eml"
+    directory = outbox_dir or config.OUTBOX_DIR
+    directory.mkdir(parents=True, exist_ok=True)
+    path: Path = directory / f"{safe_id}.eml"
     path.write_bytes(message.as_bytes())
     return message_id
 
@@ -129,15 +132,56 @@ def _dispatch_gas(message: EmailMessage, mailbox: dict[str, Any]) -> str:
     return str(data.get("messageId") or message["Message-ID"])
 
 
-def _dispatch(message: EmailMessage, mailbox: dict[str, Any]) -> str:
+def dispatch_message(
+    message: EmailMessage,
+    mailbox: dict[str, Any],
+    outbox_dir: Path | None = None,
+) -> str:
     transport = mailbox.get("transport") or "mock"
     if transport == "mock":
-        return _dispatch_mock(message, mailbox)
+        return _dispatch_mock(message, mailbox, outbox_dir)
     if transport == "smtp":
         return _dispatch_smtp(message, mailbox)
     if transport == "gas":
         return _dispatch_gas(message, mailbox)
     raise SendError(f"Unknown transport: {transport}")
+
+
+def _dispatch(message: EmailMessage, mailbox: dict[str, Any]) -> str:
+    return dispatch_message(message, mailbox)
+
+
+def mark_read_imap(mailbox: dict[str, Any], message_id: str) -> bool:
+    """Best-effort IMAP read/flag for warmup engagement.
+
+    Mock mailboxes and missing IMAP settings return False. The caller treats
+    this as an optional provider-level signal, not a delivery requirement.
+    """
+    host = mailbox.get("imap_host")
+    if not host or not mailbox.get("imap_username"):
+        return False
+    password = crypto.decrypt(mailbox.get("imap_password_enc"))
+    if not password:
+        return False
+    try:
+        client = imaplib.IMAP4_SSL(host, int(mailbox.get("imap_port") or 993), timeout=10)
+        try:
+            client.login(mailbox["imap_username"], password)
+            client.select("INBOX")
+            search_id = message_id if message_id.startswith("<") else f"<{message_id}>"
+            status, data = client.search(None, "HEADER", "Message-ID", search_id)
+            if status != "OK" or not data or not data[0]:
+                return False
+            for uid in data[0].split():
+                client.store(uid, "+FLAGS", r"(\Seen \Flagged)")
+            return True
+        finally:
+            try:
+                client.logout()
+            except Exception:
+                pass
+    except (OSError, imaplib.IMAP4.error):
+        return False
 
 
 def _check_eligible(conn, queue: dict[str, Any], draft: dict[str, Any], lead: dict[str, Any], mailbox: dict[str, Any], campaign: dict[str, Any], domain: dict[str, Any]) -> None:

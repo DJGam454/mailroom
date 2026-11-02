@@ -28,7 +28,10 @@ def overview(conn=Conn) -> dict[str, Any]:
           (SELECT COUNT(*) FROM mailboxes WHERE status = 'active') AS active_mailboxes,
           (SELECT COUNT(*) FROM domains WHERE status = 'active') AS active_domains,
           (SELECT COUNT(*) FROM suppression) AS suppressed,
-          (SELECT COUNT(*) FROM send_queue WHERE status = 'failed') AS failed_queue
+          (SELECT COUNT(*) FROM send_queue WHERE status = 'failed') AS failed_queue,
+          (SELECT COUNT(*) FROM warmup_profiles WHERE enabled = 1 AND status IN ('ramping', 'active')) AS warmup_active,
+          (SELECT COUNT(*) FROM warmup_messages WHERE kind = 'initial' AND date(sent_at) = date('now')) AS warmup_sent_today,
+          (SELECT COUNT(*) FROM warmup_messages WHERE kind = 'reply' AND date(sent_at) = date('now')) AS warmup_replies_today
         """,
     ) or {}
 

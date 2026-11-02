@@ -51,6 +51,9 @@ def init_db(path: Path | None = None) -> None:
     conn = connect(path)
     try:
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(sheet_sync_state)")}
+        if "content_hash" not in columns:
+            conn.execute("ALTER TABLE sheet_sync_state ADD COLUMN content_hash TEXT")
         defaults = {
             "transport_mode": "mock",
             "require_dns_pass": "0",
@@ -60,12 +63,34 @@ def init_db(path: Path | None = None) -> None:
             "sender_company": "Dynamisers",
             "default_timezone": "Asia/Kolkata",
             "default_offer": "a short video and website audit",
+            "warmup_enabled": "1",
+            "warmup_daily_limit": "10",
+            "warmup_domain_daily_limit": "50",
+            "warmup_pair_cooldown_days": "7",
+            "warmup_reply_rate": "0.30",
+            "warmup_open_rate": "0.80",
+            "warmup_important_rate": "0.30",
+            "warmup_min_gap_seconds": "5",
+            "warmup_max_gap_seconds": "30",
+            "warmup_window_start": "00:00",
+            "warmup_window_end": "23:59",
+            "warmup_weekdays_only": "0",
+            "warmup_max_sends_per_tick": "10",
+            "warmup_ramp": "2,2,2,4,4,4,4,6,6,6,6,6,6,6,10,10,10,10,10,10,10,15,15,15,15,15,15,15,15,15",
+            "google_sheets_spreadsheet_id": "",
+            "google_sheets_credentials_enc": "",
+            "google_sheets_conflict_policy": "merge",
+            "google_sheets_last_sync_at": "",
         }
         for key, value in defaults.items():
             conn.execute(
                 "INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)",
                 (key, value),
             )
+        conn.execute(
+            "INSERT OR IGNORE INTO warmup_profiles(mailbox_id, enabled, status, daily_limit) "
+            "SELECT id, 0, 'off', 10 FROM mailboxes"
+        )
         conn.commit()
     finally:
         conn.close()

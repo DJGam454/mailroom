@@ -1,4 +1,4 @@
-.PHONY: install seed run test check
+.PHONY: install seed run test check sync-sheets
 
 install:
 	python3 -m venv .venv
@@ -12,6 +12,9 @@ run:
 
 test:
 	.venv/bin/python -m pytest -q
+
+sync-sheets:
+	.venv/bin/python scripts/sync_sheets.py --sync
 
 check:
 	.venv/bin/python -m py_compile app/*.py app/routes/*.py app/services/*.py

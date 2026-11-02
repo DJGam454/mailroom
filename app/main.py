@@ -22,8 +22,10 @@ from app.routes import (
     overview,
     queue,
     settings,
+    sheets,
+    warmup,
 )
-from app.services import worker
+from app.services import warmup_worker, worker
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger("mailroom")
@@ -44,7 +46,10 @@ async def lifespan(_: FastAPI):
             seed_demo()
     if config.WORKER_ENABLED:
         worker.start(config.WORKER_INTERVAL)
+    if config.WARMUP_WORKER_ENABLED:
+        warmup_worker.start(config.WARMUP_WORKER_INTERVAL)
     yield
+    warmup_worker.stop()
     worker.stop()
 
 
@@ -61,6 +66,8 @@ for router in (
     queue.router,
     activity.router,
     settings.router,
+    sheets.router,
+    warmup.router,
 ):
     app.include_router(router)
 

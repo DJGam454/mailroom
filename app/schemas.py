@@ -129,3 +129,27 @@ class DraftUpdate(BaseModel):
 
 class SettingsUpdate(BaseModel):
     values: dict[str, str]
+
+
+class WarmupStart(BaseModel):
+    mailbox_ids: list[int] | None = None
+    daily_limit: int | None = Field(default=None, ge=1, le=100)
+
+
+class WarmupAction(BaseModel):
+    mailbox_ids: list[int] | None = None
+
+
+class WarmupSettingsUpdate(BaseModel):
+    values: dict[str, str]
+
+
+class SheetsConfigure(BaseModel):
+    spreadsheet_id: str = Field(min_length=10, max_length=200)
+    credentials_json: str | None = None
+    conflict_policy: Literal["merge", "local", "remote"] = "merge"
+
+
+class SheetsSyncRequest(BaseModel):
+    direction: Literal["pull", "push", "both"] = "both"
+    dry_run: bool = False

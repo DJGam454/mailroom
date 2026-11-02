@@ -276,6 +276,10 @@ def seed_demo(reset: bool = False) -> dict:
                 conn.execute(f"DELETE FROM {table}")
 
         _create_mailboxes(conn)
+        conn.execute(
+            "INSERT OR IGNORE INTO warmup_profiles(mailbox_id, enabled, status, daily_limit) "
+            "SELECT id, 0, 'off', 10 FROM mailboxes"
+        )
         sme_id = _create_campaign(conn, "Demo - NCR SME - Design & Video", 250, 50)
         healthcare_id = _create_campaign(conn, "Demo - NCR Healthcare - Doctors", 100, 25)
         sme_ids = _insert_leads(conn, sme_id, SME_LEADS)
