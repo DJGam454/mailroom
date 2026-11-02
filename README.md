@@ -24,6 +24,7 @@ Script mailbox and one Google Sheet. This project is the next layer:
 - 25 mailboxes across 10 domains,
 - approval before send,
 - mailbox rotation with daily and hourly caps,
+- suppression, repeat-send blocking and a global pause switch,
 - a coordinated queue instead of a burst,
 - closed-pool warmup with cross-domain pairing and a slow ramp,
 - two-way Google Sheets sync for leads and campaigns,
@@ -165,12 +166,14 @@ sent. Safe for testing the full approval and queue flow.
 ### smtp
 
 Per-mailbox host, port, username and encrypted password. Port 465 uses
-SMTP_SSL; other ports use STARTTLS when available. Profiles can be tested
-without sending mail.
+implicit SSL; other ports use STARTTLS. Authenticated SMTP is refused if the
+server does not offer STARTTLS, so credentials are never sent in plaintext.
+Profiles can be tested without sending mail. Optional IMAP credentials let
+warmup mark received mail read and important.
 
 ### gas
 
-Per-mailbox Google Apps Script webhook. The sample bridge is in
+Per-mailbox Google Apps Script webhook. The URL must use HTTPS. The sample bridge is in
 [`integrations/apps_script`](integrations/apps_script/). Deploy one bridge per
 Gmail mailbox and store its URL and shared secret in the mailbox settings.
 
@@ -178,15 +181,15 @@ Gmail mailbox and store its URL and shared secret in the mailbox settings.
 
 The Inboxes page supports:
 
-- adding domains
-- adding mailboxes under a domain
-- daily and hourly caps
-- transport selection
-- campaign assignment
+- adding domains and editing the DKIM selector or paused state
+- adding and editing mailboxes under a domain
+- daily and hourly caps, per-mailbox gaps and timezone
+- SMTP, IMAP and Apps Script credentials, encrypted at rest
+- transport selection and campaign assignment
 - connection tests
 - pause and resume
 - MX, SPF, DKIM and DMARC checks
-- volume against daily capacity
+- campaign plus warmup volume against daily capacity
 
 The demo has 25 mock inboxes. Replace them with real SMTP or Apps Script
 mailboxes when the domains are ready.
@@ -256,11 +259,14 @@ Full details: [docs/GOOGLE_SHEETS.md](docs/GOOGLE_SHEETS.md).
 
 ## Safety
 
-- The app binds to `127.0.0.1` only.
+- The app binds to `127.0.0.1` by default.
 - Mock mode is the default.
 - Real sending requires a deliberate transport change per mailbox.
 - SMTP and Apps Script credentials are encrypted with Fernet.
 - The key is created at `data/secret.key` with mode 0600.
+- Authenticated SMTP requires TLS; Apps Script requires HTTPS.
+- Message headers are stripped of CR/LF, and encrypted settings are never
+  returned by the API.
 - `data/`, `.env` and real lead exports are gitignored.
 - Suppression is checked at approval and again at send. Adding an address
   denies its pending drafts and cancels its queued sends immediately.
@@ -322,6 +328,7 @@ GET  /api/approvals
 POST /api/approvals/{draft_id}/approve
 POST /api/approvals/{draft_id}/deny
 POST /api/approvals/bulk
+POST /api/drafts/{draft_id}/agent
 GET  /api/mailboxes
 GET  /api/domains
 GET  /api/deliverability
@@ -359,10 +366,12 @@ Built in this phase:
 - 25-mailbox rotation and caps
 - coordinated send queue and worker
 - mock, SMTP and Apps Script transports
-- DNS checks and volume reporting
-- closed-pool warmup with a cross-domain algorithm
+- DNS checks and combined campaign plus warmup volume
+- closed-pool warmup with a cross-domain algorithm and external-seed guide
 - Google Sheets two-way sync with conflict detection
-- ICPExtractor import
+- suppression, repeat-send blocking and a global pause switch
+- manual agent re-draft through a configurable webhook
+- ICPExtractor import and CSV round-trip
 - tests and CI
 
 Deferred:

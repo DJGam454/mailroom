@@ -158,6 +158,7 @@ approvals and stops campaign sends. Warmup has its own pause controls.
 7. Assign the mailbox to the campaign and keep caps low.
 8. Use the gear on a mailbox row to edit its caps, timezone, campaigns or
    SMTP/IMAP credentials later. Leave a password blank to keep the saved one.
+   IMAP is optional and only used for best-effort warmup read flags.
 
 Credentials are encrypted with Fernet. The key is created at
 `data/secret.key` with mode 0600 on first use. Set `MAILROOM_SECRET_KEY` to use
@@ -324,9 +325,12 @@ Built:
 - queue worker with retries
 - closed-pool warmup with cross-domain pairing and ramp
 - Google Sheets two-way sync with conflicts
-- DNS checks and volume caps
+- suppression, repeat-send blocking and a global pause switch
+- editable domains and mailboxes, including IMAP for warmup flags
+- manual agent re-draft through a configurable webhook
+- DNS checks and combined campaign plus warmup volume
 - activity log
-- CSV/JSON import
+- CSV/JSON import and export round-trip
 - tests and CI
 
 Not built yet:

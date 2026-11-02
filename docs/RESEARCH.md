@@ -257,12 +257,13 @@ reports conflicts and aborts the push; local and remote policies are explicit.
 
 ## 7. What is deliberately not built yet
 
-- Google Sheet two-way sync.
-- Mailbox warmup and inbox placement.
+- Provider-level inbox placement testing and spam rescue.
 - Reply ingestion and Unibox.
-- Open tracking, link tracking, A/B optimization.
+- Automatic background Google Sheet sync.
+- Open tracking, link tracking and A/B optimization.
 - Bounce parsing from IMAP DSNs.
-- Billing, teams, multi-tenant accounts.
-- Lead Finder / enrichment.
+- Follow-up sequence editor.
+- Billing, teams and multi-tenant accounts.
+- Lead Finder and enrichment.
 
 These are kept as extension points in the schema and API.

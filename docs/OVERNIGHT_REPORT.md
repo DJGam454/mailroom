@@ -33,6 +33,7 @@ The app has:
 - Google Sheets two-way sync for leads and campaigns, suppression union and a
   read-only warmup tab, with timestamp and content-hash conflict detection.
 - Suppression management page and editable campaign settings.
+- Editable domains and mailboxes, including IMAP credentials for warmup flags.
 - Approval search, recently sent table and edit-from-lead.
 - Manual Agent re-draft button for a configured webhook.
 - Global pause switch, repeat-send protection across campaigns, and no auto

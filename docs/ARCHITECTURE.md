@@ -133,13 +133,15 @@ This prevents stale assignments from sending.
 
 ## 5. Worker
 
-- Runs every 2 seconds by default.
-- Uses `BEGIN IMMEDIATE` to lease one due item at a time.
+- Runs every 2 seconds by default and processes up to 20 due items per tick.
+- Leases each due item with `BEGIN IMMEDIATE` before the network call.
 - Leases for 120 seconds. A crashed worker leaves the item leased; the next
   cycle reclaims expired leases.
 - On success: draft/lead/message/usage/activity updates in one transaction.
-- On failure: increment attempts, write the error, requeue with exponential
-  backoff (60s, 300s, 900s), then mark failed after 3 attempts.
+- On a temporary condition (window closed, cap reached, paused mailbox): keep
+  the attempt count and reschedule after 300 seconds.
+- On a send error: increment attempts, write the error, retry after 60 seconds,
+  then mark failed after 3 attempts.
 - A global thread lock prevents overlapping ticks in one process.
 
 ## 6. Transports
@@ -152,16 +154,18 @@ Used for the demo and tests. Nothing leaves the machine.
 ### smtp
 
 Per-mailbox SMTP host, port, username and encrypted password. Port 465 uses
-SMTP_SSL; other ports use STARTTLS when available. Optional IMAP fields are
-stored for a later reply-ingestion phase. Test connection logs in without
-sending.
+implicit TLS; other ports require STARTTLS for authenticated sending, so
+credentials are never sent in plaintext. Optional IMAP fields drive the
+best-effort warmup read/flag operations; reply ingestion is still deferred.
+Test connection logs in without sending.
 
 ### gas
 
-Per-mailbox Google Apps Script webhook URL and encrypted shared secret. The
-worker POSTs a JSON body and expects `{ok: true, messageId: "..."}`. A sample
-Apps Script is in `integrations/apps_script/Code.gs`. This is the bridge for
-the user's existing Gmail/Apps Script workflow.
+Per-mailbox Google Apps Script webhook URL and encrypted shared secret. The URL
+must use HTTPS because the shared secret is sent in the body. The worker POSTs
+a JSON body and expects `{ok: true, messageId: "..."}`. A sample Apps Script is
+in `integrations/apps_script/Code.gs`. This is the bridge for the user's
+existing Gmail/Apps Script workflow.
 
 ## 6.5 Warmup
 
@@ -310,8 +314,10 @@ PATCH  /api/settings
 
 - SQLite WAL and indexes on every filter used by the UI.
 - Server-side pagination for leads.
-- Approval payload is a single join, not N+1.
-- The UI renders from one fetch per page and caches the campaign list.
+- The approval list uses one join; pool suggestions are resolved once per
+  campaign, not once per row.
+- Each page renders from one or two parallel fetches and caches the campaign
+  list.
 - No frontend framework, no bundler, no external fonts.
 - The worker sends in its own thread, so the API stays responsive.
 
@@ -321,9 +327,16 @@ PATCH  /api/settings
 - No secrets in git. `data/` is ignored.
 - Approval is server-side; a UI-only flag is not trusted.
 - Deny is terminal for the draft.
-- Suppression is checked before queueing and again before sending.
+- Suppression is checked before queueing and again before sending. Adding a
+  suppression also denies pending drafts and cancels queued sends.
+- Repeat sends to the same address are blocked at approval and at send time.
+- A global pause blocks approval and sending.
 - Real transport requires a deliberate campaign status and mailbox transport;
   the demo defaults to mock.
+- Authenticated SMTP requires implicit TLS or STARTTLS. Apps Script requires
+  HTTPS. Message headers are stripped of CR/LF.
+- Mailbox and sheet credentials are encrypted at rest. The API filters
+  encrypted settings from responses.
 
 ## 12. Extension points
 
