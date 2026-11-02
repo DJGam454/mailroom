@@ -77,6 +77,30 @@ def test_profile_matures_after_ramp(seeded):
     assert profile["status"] == "active"
 
 
+def test_warmup_pair_cooldown_prevents_repeats(seeded):
+    source = db.one(seeded, "SELECT id, domain_id FROM mailboxes ORDER BY id LIMIT 1")
+    target = db.one(
+        seeded,
+        "SELECT id, domain_id FROM mailboxes WHERE domain_id != ? ORDER BY id LIMIT 1",
+        (source["domain_id"],),
+    )
+    with db.transaction() as conn:
+        warmup.update_settings(
+            conn,
+            {
+                "warmup_min_gap_seconds": "1",
+                "warmup_max_gap_seconds": "1",
+                "warmup_daily_limit": "2",
+            },
+        )
+        warmup.start(conn, [source["id"], target["id"]], daily_limit=2)
+    warmup.tick()
+    warmup.tick()
+    threads = db.rows(seeded, "SELECT * FROM warmup_threads")
+    assert len(threads) == 1
+    assert {threads[0]["source_mailbox_id"], threads[0]["target_mailbox_id"]} == {source["id"], target["id"]}
+
+
 def test_warmup_respects_daily_target(seeded):
     random.seed(4)
     with db.transaction() as conn:
