@@ -1,29 +1,34 @@
 # Mailroom
 
-A local-first outbound control room for approval-first cold email.
+A local-first approval and sending control room for cold email.
 
-Mailroom gives one operator a single place to see every lead, approve or deny
-each email, and send through a rotating pool of mailboxes across multiple
-domains. It is inspired by Instantly's campaign and inbox-rotation model, but
-it is built for a small local operation and an explicit human approval gate.
+Mailroom is built for the gap between one Google Sheet and a real outbound
+operation. It keeps one lead database, multiple campaigns, a shared inbox pool
+and an explicit human approval step before anything is sent.
 
-> **Default is mock mode.** No email leaves this Mac until you configure a real
-> transport and switch a campaign to live. The demo ships with 10 domains and
-> 25 inboxes so rotation, caps and the approval flow can be tested end to end.
+The demo ships with **10 domains and 25 inboxes**, a **mock transport**, and a
+queue that rotates volume across the pool. No email leaves the machine until
+you connect a real inbox and deliberately switch transports.
 
-## What is in this repository
+- Repository: <https://github.com/DJGam454/mailroom>
+- Local app: <http://127.0.0.1:4600>
+- License: MIT
 
-- FastAPI + SQLite backend.
-- Zero-build HTML/CSS/JS operator UI.
-- Approval queue with a person card and one-click approve or deny.
-- Campaign workspace with multiple lead pools.
-- 25-mailbox rotation across 10 domains.
-- Per-mailbox, per-domain and per-campaign daily and hourly caps.
-- Coordinated send queue with gaps and send windows.
-- Domain checks for MX, SPF, DKIM and DMARC.
-- Mock, SMTP/IMAP, and Google Apps Script webhook transports.
-- CSV/JSON importer for the ICP extractor output.
-- Tests and CI.
+## Why this exists
+
+The existing 4400 and 4500 panels are useful operator consoles for one Apps
+Script mailbox and one Google Sheet. This project is the next layer:
+
+- one local database instead of one sheet per campaign,
+- many campaigns with separate lead pools,
+- 25 mailboxes across 10 domains,
+- approval before send,
+- mailbox rotation with daily and hourly caps,
+- a coordinated queue instead of a burst,
+- mock, SMTP and Google Apps Script transports.
+
+See [docs/RESEARCH.md](docs/RESEARCH.md) for the Instantly feature research and
+the findings from the existing Apps Script projects.
 
 ## Quick start
 
@@ -38,40 +43,275 @@ uvicorn app.main:app --host 127.0.0.1 --port 4600 --reload
 
 Open <http://127.0.0.1:4600>.
 
-Import your real ICP pack locally (never committed):
+The seed creates synthetic data only:
+
+- 10 `.test` domains
+- 25 mock inboxes
+- 2 demo campaigns
+- 34 fictional leads
+- 3 sent examples, 1 denied, 2 queued
+
+There are no real addresses, credentials or private lead records in the public
+repository.
+
+## The approval flow
+
+```text
+lead -> draft -> pending approval -> approved -> queued -> sending -> sent
+                         |
+                         +-> denied
+                         +-> failed
+```
+
+The Approvals page shows one card per email:
+
+- person or business name
+- email
+- role or owner label
+- company and industry
+- campaign, source and verification grade
+- exact subject and body
+- the rotation pool that will assign a mailbox
+
+You can approve and queue, deny, edit the copy, re-render from the template, or
+bulk approve. Keyboard shortcuts: `j` / `k` move, `a` approve, `d` deny.
+
+Approval is server-side. A denied draft can never be picked up by the worker.
+Every transition is written to the activity log.
+
+## Mailbox rotation
+
+Each approval reserves the best eligible mailbox and a send slot.
+
+Filters:
+
+- campaign is active and inside its window
+- mailbox and domain are active
+- mailbox is assigned to the campaign
+- under the mailbox daily and hourly limit
+- under the campaign per-domain limit
+- recipient is not suppressed
+
+Strategies:
+
+- `least_used` (default): fewest sends today, then earliest next slot
+- `round_robin`: least recently used
+- `weighted`: weighted random choice
+
+Slot reservation:
+
+```text
+scheduled_at = max(now, mailbox.next_available_at, next window start)
+mailbox.next_available_at = scheduled_at + random gap
+```
+
+The worker re-checks every limit before sending, so a paused mailbox or a
+campaign that was stopped cannot send a stale approval.
+
+## Real ICP data
+
+The public repo contains synthetic leads. Your real ICPExtractor pack is
+imported into `data/mailroom.db`, which is gitignored.
+
+Main A/B pool:
 
 ```sh
 python3 scripts/import_icp.py \
   --json /Users/divyantiwari/ICPExtractor/output/leads.json \
-  --campaign "NCR SME - Nov 2026" \
-  --limit 217
+  --campaign "NCR SME - Nov 2026" --grades A,B
 ```
 
-The importer writes only to the local SQLite database under `data/`, which is
-gitignored.
+Freemail pool:
 
-## Why this exists
+```sh
+python3 scripts/import_icp.py \
+  --json /Users/divyantiwari/ICPExtractor/output/leads.json \
+  --campaign "NCR Freemail - Nov 2026" --grades C
+```
 
-The existing 4400 and 4500 panels are useful operator consoles for one Apps
-Script mailbox and one Google Sheet. This project is the next layer: one
-database, many campaigns, many mailboxes, explicit approval, and a scheduler
-that coordinates volume instead of sending everything at once.
+Healthcare:
 
-See:
+```sh
+python3 scripts/import_icp.py \
+  --csv /Users/divyantiwari/ICPExtractor/output/healthcare_sheet_ready.csv \
+  --campaign "NCR Healthcare - Nov 2026"
 
-- [docs/RESEARCH.md](docs/RESEARCH.md) - what Instantly does and what we learned
-  from the existing Apps Script projects.
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - data model, rotation, queue,
-  transports and failure handling.
-- [docs/OPERATIONS.md](docs/OPERATIONS.md) - runbook.
-- [docs/OVERNIGHT_REPORT.md](docs/OVERNIGHT_REPORT.md) - concise morning report.
+python3 scripts/import_icp.py \
+  --csv /Users/divyantiwari/ICPExtractor/output/healthcare_sheet_ready_freemail.csv \
+  --campaign "NCR Healthcare Freemail - Nov 2026"
+```
 
-## Status
+The importer creates the campaign if needed, assigns every mailbox, renders a
+first draft for each new lead and is idempotent by email within a campaign.
 
-This is the approval and sending foundation. Lead sourcing, warmup, reply inbox,
-and analytics can be layered on later. The schema and API are designed for
-that.
+The default demo schedule is all day, every day. For a real campaign, use
+office hours and a weekday schedule and keep volume low.
+
+## Transports
+
+### mock
+
+The default. Writes a real `.eml` file to `data/outbox/` and marks the message
+sent. Safe for testing the full approval and queue flow.
+
+### smtp
+
+Per-mailbox host, port, username and encrypted password. Port 465 uses
+SMTP_SSL; other ports use STARTTLS when available. Profiles can be tested
+without sending mail.
+
+### gas
+
+Per-mailbox Google Apps Script webhook. The sample bridge is in
+[`integrations/apps_script`](integrations/apps_script/). Deploy one bridge per
+Gmail mailbox and store its URL and shared secret in the mailbox settings.
+
+## Domains and inboxes
+
+The Inboxes page supports:
+
+- adding domains
+- adding mailboxes under a domain
+- daily and hourly caps
+- transport selection
+- campaign assignment
+- connection tests
+- pause and resume
+- MX, SPF, DKIM and DMARC checks
+- volume against daily capacity
+
+The demo has 25 mock inboxes. Replace them with real SMTP or Apps Script
+mailboxes when the domains are ready.
+
+## Deliverability checks
+
+This phase reports volume, caps and DNS state. It does not score reputation.
+
+- sent today per mailbox, domain and campaign
+- remaining daily capacity
+- hourly usage
+- bounce counters
+- DNS pass, missing or unknown for MX, SPF, DKIM and DMARC
+- last seven days of sends
+
+## Operator pages
+
+| Page | Purpose |
+| --- | --- |
+| Overview | approvals, queue, inbox health and recent activity |
+| Approvals | person card, email preview, approve or deny |
+| Campaigns | separate lead pools and limits |
+| Leads | the single sheet: search, filter, import, export |
+| Inboxes & domains | connections, caps and DNS checks |
+| Deliverability | volume and DNS state |
+| Send queue | scheduled sends, mailbox, retry state |
+| Activity | append-only audit trail |
+| Settings | sender identity, safety switches, agent hook |
+
+## Safety
+
+- The app binds to `127.0.0.1` only.
+- Mock mode is the default.
+- Real sending requires a deliberate transport change per mailbox.
+- SMTP and Apps Script credentials are encrypted with Fernet.
+- The key is created at `data/secret.key` with mode 0600.
+- `data/`, `.env` and real lead exports are gitignored.
+- Suppression is checked at approval and again at send.
+- A denied draft is terminal.
+- A stale approval cannot send after a mailbox is paused or a cap is reached.
+
+Read [docs/OPERATIONS.md](docs/OPERATIONS.md) before connecting a real inbox.
+
+## Project structure
+
+```text
+app/
+  main.py              FastAPI entrypoint and worker lifecycle
+  db.py                SQLite helpers
+  schema.sql           tables and indexes
+  seed.py              synthetic demo data
+  crypto.py            local credential encryption
+  routes/              JSON API
+  services/            drafting, rotation, sender, worker, DNS, importer
+  static/              zero-build operator UI
+scripts/
+  import_icp.py        import a real ICPExtractor pack locally
+tests/                 12 backend tests
+integrations/
+  apps_script/         optional Gmail bridge
+docs/
+  RESEARCH.md          Instantly and existing-project research
+  ARCHITECTURE.md      data model, rotation, queue, transports
+  OPERATIONS.md        runbook
+  OVERNIGHT_REPORT.md  morning summary
+```
+
+## Tests and checks
+
+```sh
+make check
+```
+
+This compiles the Python, checks the JavaScript syntax and runs the pytest
+suite. GitHub Actions runs the same checks on every push and pull request.
+
+## API
+
+The UI uses a small JSON API:
+
+```text
+GET  /api/overview
+GET  /api/campaigns
+GET  /api/leads
+GET  /api/approvals
+POST /api/approvals/{draft_id}/approve
+POST /api/approvals/{draft_id}/deny
+POST /api/approvals/bulk
+GET  /api/mailboxes
+GET  /api/domains
+GET  /api/deliverability
+GET  /api/queue
+POST /api/queue/tick
+GET  /api/activity
+GET  /api/settings
+```
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full surface.
+
+## Scope
+
+Built in this phase:
+
+- approval queue and audit log
+- campaigns and lead worksheets
+- 25-mailbox rotation and caps
+- coordinated send queue and worker
+- mock, SMTP and Apps Script transports
+- DNS checks and volume reporting
+- ICPExtractor import
+- tests and CI
+
+Deferred:
+
+- warmup and inbox placement
+- reply ingestion and Unibox
+- Google Sheet two-way sync
+- open and link tracking
+- follow-up sequence editor UI
+- teams, billing and multi-user auth
+
+## Agent hook
+
+Settings includes an optional agent webhook. Mailroom can POST a lead and
+campaign to an external agent and expects:
+
+```json
+{"subject": "...", "body": "..."}
+```
+
+If the agent fails, Mailroom falls back to the local template. This is the
+connection point for the OpenCode or OpenBot agent team.
 
 ## License
 
-MIT.
+MIT. See `LICENSE`.
