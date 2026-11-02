@@ -144,7 +144,6 @@ def generate_drafts(
     conn,
     campaign_id: int,
     lead_ids: list[int] | None = None,
-    use_agent: bool = False,
 ) -> int:
     campaign = db.one(conn, "SELECT * FROM campaigns WHERE id = ?", (campaign_id,))
     if not campaign:
@@ -152,10 +151,6 @@ def generate_drafts(
     step = campaign_step(conn, campaign_id)
     if not step:
         return 0
-
-    settings = db.settings_dict(conn)
-    agent_webhook = settings.get("agent_webhook", "")
-    instruction = AGENT_INSTRUCTION
 
     if lead_ids:
         placeholders = ",".join("?" for _ in lead_ids)
@@ -176,10 +171,6 @@ def generate_drafts(
     created = 0
     for lead in candidates:
         subject, body = template_draft(conn, lead, campaign, step)
-        if use_agent and agent_webhook:
-            generated = agent_draft(lead, campaign, instruction, agent_webhook)
-            if generated:
-                subject, body = generated
         if not subject or not body:
             continue
         conn.execute(

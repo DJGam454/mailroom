@@ -205,11 +205,13 @@ const state = {
   overview: null,
   approvals: { items: [], total: 0, pools: {} },
   approvalQuery: "",
+  approvalRequest: 0,
   selectedApproval: null,
   approvalChecked: new Set(),
   approvalBusy: false,
   leadDraft: null,
   leads: { items: [], total: 0, page: 1, page_size: 50, pages: 1 },
+  leadRequest: 0,
   leadFilters: { q: "", status: "", page: 1, pageSize: 50 },
   inboxes: [],
   domains: [],
@@ -804,11 +806,12 @@ async function renderApprovals(token) {
 }
 
 async function loadApprovals(token = state.renderToken) {
+  const request = ++state.approvalRequest;
   const query = new URLSearchParams({ page_size: "100" });
   if (state.campaignId) query.set("campaign_id", state.campaignId);
   if (state.approvalQuery) query.set("q", state.approvalQuery);
   const data = await api(`/approvals?${query.toString()}`);
-  if (token !== state.renderToken) return;
+  if (token !== state.renderToken || request !== state.approvalRequest) return;
   state.approvals = data;
   const ids = new Set(data.items.map((item) => item.draft_id));
   state.approvalChecked = new Set([...state.approvalChecked].filter((id) => ids.has(id)));
@@ -825,8 +828,8 @@ function renderApprovalList() {
   const checked = state.approvalChecked.size;
   container.innerHTML = `
     <div class="approval-list-head">
-      <div><div class="card-title">Review queue</div><div class="count">${fmtNumber(state.approvals.total)} waiting ${state.campaignId ? `in ${esc(campaignName(state.campaignId))}` : "across campaigns"}</div></div>
-      <div class="right" style="margin-left:auto">${items.length ? `<label class="checkline small"><input type="checkbox" id="approval-select-all" ${checked && checked === items.length ? "checked" : ""}/> Select all</label>` : ""}</div>
+      <div><div class="card-title">Review queue</div><div class="count">${fmtNumber(state.approvals.total)} waiting${state.campaignId ? ` in ${esc(campaignName(state.campaignId))}` : ""} · ${fmtNumber(items.length)} shown</div></div>
+      <div class="right" style="margin-left:auto">${items.length ? `<label class="checkline small"><input type="checkbox" id="approval-select-all" ${checked && checked === items.length ? "checked" : ""}/> Select shown</label>` : ""}</div>
     </div>
     ${checked ? `<div style="display:flex;gap:6px;padding:9px 12px;border-bottom:1px solid var(--line);background:#fbfaff"><span class="chip violet">${checked} selected</span><button class="btn xs success" data-action="bulk-approve">Approve selected</button><button class="btn xs danger" data-action="bulk-deny">Deny selected</button></div>` : ""}
     <div id="approval-list-rows">
@@ -1288,6 +1291,7 @@ async function renderLeads(token) {
 async function loadLeads(token = state.renderToken) {
   const shell = $("#leads-table-shell");
   if (!shell) return;
+  const request = ++state.leadRequest;
   shell.innerHTML = `<div style="padding:18px"><div class="skeleton skel-line"></div><div class="skeleton skel-line"></div><div class="skeleton skel-line"></div></div>`;
   const query = new URLSearchParams({
     page: String(state.leadFilters.page),
@@ -1298,7 +1302,7 @@ async function loadLeads(token = state.renderToken) {
   if (state.leadFilters.q) query.set("q", state.leadFilters.q);
   try {
     const data = await api(`/leads?${query.toString()}`);
-    if (token !== state.renderToken) return;
+    if (token !== state.renderToken || request !== state.leadRequest) return;
     state.leads = data;
     $("#lead-count").textContent = `${fmtNumber(data.total)} lead(s)`;
     $("#leads-table-shell").innerHTML = data.items.length ? `
@@ -1320,7 +1324,7 @@ async function loadLeads(token = state.renderToken) {
     ` : emptyState("No leads match", "Try another status, campaign or search term. Import a CSV to add a new pool.", "leads");
     renderLeadPagination(data);
   } catch (error) {
-    if (token !== state.renderToken) return;
+    if (token !== state.renderToken || request !== state.leadRequest) return;
     shell.innerHTML = `<div class="card-body"><div class="notice red">${esc(error.message)}</div></div>`;
   }
 }
@@ -2125,7 +2129,7 @@ async function renderQueue(token) {
     <div class="card mt-16">
       <div class="card-head"><div><div class="card-title">Upcoming sends</div><div class="card-sub">Each row has a mailbox reservation and a send time.</div></div><div class="right"><button class="btn sm" data-action="queue-tick">${icon("zap", 13)} Tick worker</button></div></div>
       ${items.length ? `<div class="table-wrap"><table class="table"><thead><tr><th>Scheduled</th><th>Person</th><th>Campaign</th><th>Mailbox</th><th>Status</th><th>Attempts</th><th></th></tr></thead><tbody>${items.map((item) => `
-        <tr><td class="cell-nowrap">${esc(fmtDate(item.scheduled_at))}<div class="sub">${esc(fmtRelative(item.scheduled_at))}</div></td><td><div class="cell-person"><div class="avatar sm ${avatarTone(item.name)}">${esc(initials(item.name))}</div><div><div class="name">${esc(item.name)}</div><div class="sub">${esc(item.company)} · ${esc(item.email)}</div></div></div></td><td class="cell-muted">${esc(item.campaign_name)}</td><td class="cell-muted mono" style="font-size:10.5px">${esc(item.mailbox_email)}</td><td>${statusChip(item.status)}</td><td class="cell-muted">${fmtNumber(item.attempts)}</td><td class="cell-actions">${["queued", "failed"].includes(item.status) ? `<button class="btn xs" data-action="send-now" data-id="${item.id}">Send now</button><button class="btn xs ghost" data-action="cancel-queue" data-id="${item.id}">Cancel</button>` : ""}</td></tr>
+        <tr><td class="cell-nowrap">${esc(fmtDate(item.scheduled_at))}<div class="sub">${esc(fmtRelative(item.scheduled_at))}</div></td><td><div class="cell-person"><div class="avatar sm ${avatarTone(item.name)}">${esc(initials(item.name))}</div><div><div class="name">${esc(item.name)}</div><div class="sub">${esc(item.company)} · ${esc(item.email)}</div></div></div></td><td class="cell-muted">${esc(item.campaign_name)}</td><td class="cell-muted mono" style="font-size:10.5px">${esc(item.mailbox_email)}</td><td>${statusChip(item.status)}${item.last_error ? `<div class="sub" title="${esc(item.last_error)}">${esc(item.last_error.slice(0, 70))}${item.last_error.length > 70 ? "…" : ""}</div>` : ""}</td><td class="cell-muted">${fmtNumber(item.attempts)}</td><td class="cell-actions">${["queued", "failed"].includes(item.status) ? `<button class="btn xs" data-action="send-now" data-id="${item.id}">Send now</button><button class="btn xs ghost" data-action="cancel-queue" data-id="${item.id}">Cancel</button>` : ""}</td></tr>
       `).join("")}</tbody></table></div>` : emptyState("Queue is empty", "Approve a draft to reserve a mailbox and a send slot.", "queue")}
     </div>
     <div class="card mt-16">
