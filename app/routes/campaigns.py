@@ -26,6 +26,7 @@ def list_campaigns(conn=Conn) -> dict[str, Any]:
 @router.post("/campaigns")
 def create_campaign(payload: CampaignCreate, conn=Conn) -> dict[str, Any]:
     now = db.now_iso()
+    timezone = payload.timezone or db.settings_dict(conn).get("default_timezone") or "Asia/Kolkata"
     try:
         with conn:
             cursor = conn.execute(
@@ -38,7 +39,7 @@ def create_campaign(payload: CampaignCreate, conn=Conn) -> dict[str, Any]:
                     payload.approval_mode,
                     payload.daily_limit,
                     payload.per_domain_limit,
-                    payload.timezone,
+                    timezone,
                     payload.window_start,
                     payload.window_end,
                     json.dumps(payload.working_days),

@@ -22,6 +22,12 @@ def render(template: str, values: dict[str, Any]) -> str:
 
 TITLES = {"dr", "dr.", "mr", "mr.", "mrs", "mrs.", "ms", "ms.", "prof", "prof.", "shri", "smt", "sri"}
 
+AGENT_INSTRUCTION = (
+    "Write a short, honest cold email. Use only facts in the lead record. "
+    "Do not invent customers, metrics or product claims. Keep it under 120 words. "
+    "Return JSON with subject and body."
+)
+
 
 def first_name(name: str) -> str:
     parts = (name or "").strip().split()
@@ -147,11 +153,7 @@ def generate_drafts(
 
     settings = db.settings_dict(conn)
     agent_webhook = settings.get("agent_webhook", "")
-    instruction = (
-        "Write a short, honest cold email. Use only facts in the lead record. "
-        "Do not invent customers, metrics or product claims. Keep it under 120 words. "
-        "Return JSON with subject and body."
-    )
+    instruction = AGENT_INSTRUCTION
 
     if lead_ids:
         placeholders = ",".join("?" for _ in lead_ids)
@@ -191,6 +193,38 @@ def generate_drafts(
     if created:
         db.audit(conn, "drafts_generated", "campaign", campaign_id, {"count": created})
     return created
+
+
+def agent_redraft(conn, draft_id: int) -> tuple[dict[str, Any] | None, str | None]:
+    draft = db.one(conn, "SELECT * FROM drafts WHERE id = ?", (draft_id,))
+    if not draft:
+        return None, "Draft not found"
+    if draft["status"] != "pending":
+        return None, "Only pending drafts can be re-drafted by the agent"
+    lead = db.one(conn, "SELECT * FROM leads WHERE id = ?", (draft["lead_id"],))
+    campaign = db.one(conn, "SELECT * FROM campaigns WHERE id = ?", (draft["campaign_id"],))
+    if not lead or not campaign:
+        return None, "Lead or campaign not found"
+    webhook = (db.settings_dict(conn).get("agent_webhook") or "").strip()
+    if not webhook:
+        return None, "Configure the agent webhook in Settings first"
+    generated = agent_draft(lead, campaign, AGENT_INSTRUCTION, webhook)
+    if not generated:
+        return None, "The agent did not return a valid subject and body"
+    subject, body = generated
+    now = db.now_iso()
+    conn.execute(
+        "UPDATE drafts SET subject = ?, body = ?, updated_at = ? WHERE id = ?",
+        (subject, body, now, draft_id),
+    )
+    db.audit(
+        conn,
+        "draft_agent_generated",
+        "draft",
+        draft_id,
+        {"lead_id": lead["id"], "email": lead["email"], "source": "agent"},
+    )
+    return db.one(conn, "SELECT * FROM drafts WHERE id = ?", (draft_id,)), None
 
 
 def regenerate_draft(conn, draft_id: int) -> dict[str, Any] | None:

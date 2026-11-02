@@ -41,13 +41,14 @@ def ensure_campaign(
     window_start = "00:00" if all_day else "09:30"
     window_end = "23:59" if all_day else "17:30"
     working_days = "[1,2,3,4,5,6,7]" if all_day else "[1,2,3,4,5]"
+    timezone = db.settings_dict(conn).get("default_timezone") or "Asia/Kolkata"
     now = db.now_iso()
     cursor = conn.execute(
         "INSERT INTO campaigns(name, status, approval_mode, daily_limit, per_domain_limit, timezone, "
         "window_start, window_end, working_days, rotation_strategy, min_gap_seconds, max_gap_seconds, "
-        "created_at, updated_at) VALUES (?, 'active', 'manual', ?, ?, 'Asia/Kolkata', ?, ?, ?, "
+        "created_at, updated_at) VALUES (?, 'active', 'manual', ?, ?, ?, ?, ?, ?, "
         "'least_used', 45, 240, ?, ?)",
-        (name, daily_limit, per_domain_limit, window_start, window_end, working_days, now, now),
+        (name, daily_limit, per_domain_limit, timezone, window_start, window_end, working_days, now, now),
     )
     campaign_id = int(cursor.lastrowid)
     conn.execute(

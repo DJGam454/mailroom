@@ -893,7 +893,7 @@ function renderApprovalDetail() {
     <div class="email-shell">
       <div class="email-toolbar">
         <span class="label">Email preview</span>
-        <div class="right"><button class="btn xs" data-action="edit-draft" data-id="${item.draft_id}">${icon("edit", 12)} Edit</button><button class="btn xs" data-action="regenerate-draft" data-id="${item.draft_id}">${icon("refresh", 12)} Re-render</button></div>
+        <div class="right"><button class="btn xs" data-action="edit-draft" data-id="${item.draft_id}">${icon("edit", 12)} Edit</button><button class="btn xs" data-action="regenerate-draft" data-id="${item.draft_id}">${icon("refresh", 12)} Re-render</button>${state.settings.agent_webhook ? `<button class="btn xs" data-action="agent-draft" data-id="${item.draft_id}">${icon("zap", 12)} Agent</button>` : ""}</div>
       </div>
       <div class="email-preview">
         <div class="email-head">
@@ -1109,6 +1109,7 @@ function campaignCard(campaign) {
 }
 
 function openCampaignModal() {
+  const timezone = state.settings.default_timezone || "Asia/Kolkata";
   openModal({
     title: "New campaign",
     sub: "A campaign owns a lead pool, a sequence and its own sending limits.",
@@ -1131,7 +1132,7 @@ function openCampaignModal() {
             <div class="field"><label for="camp-start">Window start</label><input class="input" id="camp-start" name="window_start" type="time" value="09:30" /></div>
             <div class="field"><label for="camp-end">Window end</label><input class="input" id="camp-end" name="window_end" type="time" value="17:30" /></div>
             <div class="field"><label for="camp-rotation">Rotation</label><select class="select" id="camp-rotation" name="rotation_strategy"><option value="least_used" selected>Least used today</option><option value="round_robin">Round robin</option><option value="weighted">Weighted</option></select></div>
-            <div class="field"><label for="camp-timezone">Timezone</label><input class="input" id="camp-timezone" name="timezone" value="Asia/Kolkata" /></div>
+            <div class="field"><label for="camp-timezone">Timezone</label><input class="input" id="camp-timezone" name="timezone" value="${esc(timezone)}" /></div>
           </div>
           <div class="field mt-12"><label>Working days</label><div class="row wrap" style="gap:12px">${["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day, index) => `<label class="checkline"><input type="checkbox" name="days" value="${index + 1}" ${index < 5 ? "checked" : ""}/> ${day}</label>`).join("")}</div></div>
         </div>
@@ -2184,7 +2185,7 @@ async function renderSettings(token) {
             <div class="form-section-title">Safety and agent hook</div>
             <div class="toggle-row"><div><div class="toggle-label">Require DNS pass before real sending</div><div class="toggle-hint">Mock mode never blocks. This is a guard for SMTP or Apps Script.</div></div><label class="switch"><input type="checkbox" name="require_dns_pass" ${state.settings.require_dns_pass === "1" ? "checked" : ""}/><span></span></label></div>
             <div class="toggle-row"><div><div class="toggle-label">Pause all sending</div><div class="toggle-hint">Blocks new approvals and stops the campaign queue. Warmup keeps running on its own switch.</div></div><label class="switch"><input type="checkbox" name="sending_paused" ${state.settings.sending_paused === "1" ? "checked" : ""}/><span></span></label></div>
-            <div class="field mt-12"><label for="set-webhook">Agent webhook</label><input class="input" id="set-webhook" name="agent_webhook" value="${esc(state.settings.agent_webhook || "")}" placeholder="https://your-agent.example/draft" /><div class="hint">Optional. POST a lead and receive JSON with subject and body. Leave empty to use the local template.</div></div>
+            <div class="field mt-12"><label for="set-webhook">Agent webhook</label><input class="input" id="set-webhook" name="agent_webhook" value="${esc(state.settings.agent_webhook || "")}" placeholder="https://your-agent.example/draft" /><div class="hint">Optional. Use the Agent button on an approval to POST one lead and receive JSON with subject and body. Leave empty to keep the local template.</div></div>
           </div>
           <div class="row mt-16"><button class="btn primary" type="submit">${icon("check", 14)} Save settings</button><span class="muted small">Stored in the local database.</span></div>
         </form>
@@ -2202,7 +2203,7 @@ async function renderSettings(token) {
         </div>
         <div class="card card-body">
           <div class="card-title">Agent contract</div>
-          <div class="card-sub mt-8">POST to your webhook with <code>{instruction, campaign, lead}</code>. Return <code>{subject, body}</code>. If the agent fails, Mailroom falls back to the template.</div>
+          <div class="card-sub mt-8">POST to your webhook with <code>{instruction, campaign, lead}</code>. Return <code>{subject, body}</code>. Click <strong>Agent</strong> on an approval to re-draft that lead. A failed call leaves the existing draft unchanged.</div>
           <div class="mono small muted mt-12" style="background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:10px;line-height:1.5">{"subject":"...","body":"..."}</div>
         </div>
       </div>
@@ -2394,6 +2395,25 @@ document.addEventListener("click", async (event) => {
     }
     return;
   }
+  if (action === "agent-draft") {
+    if (target.dataset.busy) return;
+    const original = target.innerHTML;
+    target.dataset.busy = "1";
+    target.disabled = true;
+    target.innerHTML = `${icon("zap", 12)} Working...`;
+    try {
+      await api(`/drafts/${id}/agent`, { method: "POST" });
+      toast("The agent returned a new draft. Review it before approving.");
+      await loadApprovals();
+    } catch (error) {
+      toast(error.message, "error");
+    } finally {
+      delete target.dataset.busy;
+      target.disabled = false;
+      target.innerHTML = original;
+    }
+    return;
+  }
   if (action === "bulk-approve") {
     await bulkApprovals("approve");
     return;
@@ -2550,6 +2570,11 @@ async function init() {
   } catch (error) {
     $("#app").innerHTML = `<div class="boot">Could not load Mailroom: ${esc(error.message)}</div>`;
     return;
+  }
+  try {
+    state.settings = (await api("/settings")).values || {};
+  } catch {
+    state.settings = {};
   }
   const saved = localStorage.getItem("mailroom.campaign");
   state.campaignId = saved ? Number(saved) : null;

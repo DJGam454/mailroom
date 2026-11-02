@@ -13,7 +13,7 @@ class CampaignCreate(BaseModel):
     approval_mode: Literal["manual"] = "manual"
     daily_limit: int = Field(default=250, ge=1, le=10000)
     per_domain_limit: int = Field(default=50, ge=1, le=1000)
-    timezone: str = "Asia/Kolkata"
+    timezone: str | None = None
     window_start: str = "09:30"
     window_end: str = "17:30"
     working_days: list[int] = Field(default_factory=lambda: [1, 2, 3, 4, 5])

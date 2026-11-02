@@ -58,7 +58,6 @@ def init_db(path: Path | None = None) -> None:
         # so an old row can never imply a bypass of the human step.
         conn.execute("UPDATE campaigns SET approval_mode = 'manual' WHERE approval_mode != 'manual'")
         defaults = {
-            "transport_mode": "mock",
             "require_dns_pass": "0",
             "sending_paused": "0",
             "agent_webhook": "",

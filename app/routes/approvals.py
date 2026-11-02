@@ -10,7 +10,7 @@ from app import db
 from app.deps import Conn
 from app.schemas import ApproveRequest, BulkRequest, DenyRequest, DraftUpdate
 from app.services import approvals as approval_service
-from app.services import rotation
+from app.services import drafting, rotation
 
 router = APIRouter(prefix="/api", tags=["approvals"])
 
@@ -118,6 +118,16 @@ def bulk(payload: BulkRequest, conn=Conn) -> dict[str, Any]:
     except approval_service.ApprovalError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"ok": True, **result}
+
+
+@router.post("/drafts/{draft_id}/agent")
+def agent_draft(draft_id: int, conn=Conn) -> dict[str, Any]:
+    with conn:
+        draft, error = drafting.agent_redraft(conn, draft_id)
+    if error:
+        status_code = 404 if error == "Draft not found" else 400
+        raise HTTPException(status_code=status_code, detail=error)
+    return {"ok": True, "draft": draft}
 
 
 @router.patch("/drafts/{draft_id}")
