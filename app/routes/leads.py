@@ -104,6 +104,8 @@ def export_leads(
             "draft_status",
             "mailbox",
             "scheduled_at",
+            "offer",
+            "source",
             "notes",
         ]
     )
@@ -125,6 +127,8 @@ def export_leads(
                 item.get("draft_status") or "",
                 item.get("mailbox_email") or "",
                 item.get("scheduled_at") or "",
+                item.get("offer") or "",
+                item.get("source") or "",
                 (item.get("notes") or "").replace("\n", " "),
             ]
         )

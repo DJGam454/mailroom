@@ -129,6 +129,7 @@ def map_csv_lead(row: dict[str, str]) -> dict[str, Any]:
         or ("C" if email.endswith(("@gmail.com", "@yahoo.com", "@outlook.com")) else "B")
     )
     source = pick("Source") or "ICPExtractor CSV"
+    mailroom_export = "draft_status" in values or "campaign_id" in values
     return {
         "external_id": (pick("Lead ID", "ID") or email)[:500],
         "name": (contact or company or email)[:200],
@@ -139,7 +140,7 @@ def map_csv_lead(row: dict[str, str]) -> dict[str, Any]:
         "company_domain": _email_domain(email),
         "website": _trim(pick("Website"), 500),
         "city": _trim(pick("City"), 120),
-        "notes": _csv_strength(notes),
+        "notes": notes if mailroom_export else _csv_strength(notes),
         "offer": _trim(pick("Offer", "Service Assigned"), 180),
         "email_grade": grade,
         "verification": _trim(pick("Verification") or "Unknown", 40),

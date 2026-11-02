@@ -91,6 +91,8 @@ def test_map_csv_lead_accepts_mailroom_export_headers():
             "verification": "Deliverable",
             "notes": "A strong local team.",
             "status": "sent",
+            "campaign_id": "3",
+            "draft_status": "sent",
         }
     )
     assert record["email"] == "ada@example.test"
@@ -102,6 +104,7 @@ def test_map_csv_lead_accepts_mailroom_export_headers():
     assert record["email_grade"] == "A"
     assert record["verification"] == "Deliverable"
     assert record["company_domain"] == "example.test"
+    assert record["notes"] == "A strong local team."
 
 
 def test_map_csv_lead_accepts_icp_sheet_headers():
