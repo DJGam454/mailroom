@@ -19,7 +19,7 @@ SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 
 
 def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def connect(path: Path | None = None) -> sqlite3.Connection:
