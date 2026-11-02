@@ -507,7 +507,7 @@ function renderShell() {
           <div class="breadcrumb">Workspace <span>/</span> <strong id="crumb-page">Overview</strong></div>
           <div class="topbar-search">
             ${icon("search", 15)}
-            <input id="global-search" type="search" placeholder="Search leads by name, email or company..." autocomplete="off" />
+            <input id="global-search" type="search" aria-label="Search leads" placeholder="Search leads by name, email or company..." autocomplete="off" />
           </div>
           <div class="topbar-actions">
             <button class="icon-btn" data-action="help" title="How Mailroom works" aria-label="Help">${icon("help", 17)}</button>
@@ -794,7 +794,7 @@ async function renderApprovals(token) {
     <div class="page-head">
       <div><h1 class="page-title">Approvals</h1><div class="page-sub">${esc(PAGES.approvals.sub)}</div></div>
       <div class="page-actions">
-        <div class="search">${icon("search", 15)}<input id="approval-search" type="search" placeholder="Search name, email, company..." value="${esc(state.approvalQuery)}" /></div>
+        <div class="search">${icon("search", 15)}<input id="approval-search" type="search" aria-label="Search approvals" placeholder="Search name, email, company..." value="${esc(state.approvalQuery)}" /></div>
         <button class="btn" data-action="refresh">${icon("refresh", 15)} Refresh</button>
       </div>
     </div>
@@ -838,7 +838,7 @@ function renderApprovalList() {
   const checked = state.approvalChecked.size;
   container.innerHTML = `
     <div class="approval-list-head">
-      <div><div class="card-title">Review queue</div><div class="count">${fmtNumber(state.approvals.total)} waiting${state.campaignId ? ` in ${esc(campaignName(state.campaignId))}` : ""} · ${fmtNumber(items.length)} shown</div></div>
+      <div><div class="card-title">Review queue</div><div class="count">${fmtNumber(state.approvals.total)} waiting${state.campaignId ? ` in ${esc(campaignName(state.campaignId))}` : ""} · ${fmtNumber(items.length)} shown${state.campaignId ? ` · <a href="#" data-action="clear-campaign" style="text-decoration:underline">Show all</a>` : ""}</div></div>
       <div class="right" style="margin-left:auto">${items.length ? `<label class="checkline small"><input type="checkbox" id="approval-select-all" ${checked && checked === items.length ? "checked" : ""}/> Select shown</label>` : ""}</div>
     </div>
     ${checked ? `<div style="display:flex;gap:6px;padding:9px 12px;border-bottom:1px solid var(--line);background:#fbfaff"><span class="chip violet">${checked} selected</span><button class="btn xs success" data-action="bulk-approve">Approve selected</button><button class="btn xs danger" data-action="bulk-deny">Deny selected</button></div>` : ""}
@@ -1265,7 +1265,7 @@ async function renderLeads(token) {
   const campaignFilter = state.campaignId || "";
   $("#page").innerHTML = `
     <div class="page-head">
-      <div><h1 class="page-title">Leads</h1><div class="page-sub">${esc(PAGES.leads.sub)} ${state.campaignId ? `Viewing <strong>${esc(campaignName(state.campaignId))}</strong>.` : ""}</div></div>
+      <div><h1 class="page-title">Leads</h1><div class="page-sub">${esc(PAGES.leads.sub)} ${state.campaignId ? `Viewing <strong>${esc(campaignName(state.campaignId))}</strong>. <a href="#" data-action="clear-campaign" style="text-decoration:underline">Show all campaigns</a>` : ""}</div></div>
       <div class="page-actions">
         <button class="btn" data-action="import-leads">${icon("upload", 15)} Import CSV</button>
         <a class="btn" href="/api/leads/export.csv?campaign_id=${encodeURIComponent(campaignFilter)}&status=${encodeURIComponent(state.leadFilters.status)}&q=${encodeURIComponent(state.leadFilters.q)}">${icon("download", 15)} Export</a>
@@ -1273,7 +1273,7 @@ async function renderLeads(token) {
     </div>
     <div class="card">
       <div class="table-toolbar">
-        <div class="search">${icon("search", 15)}<input id="lead-search" type="search" placeholder="Search name, email, company..." value="${esc(state.leadFilters.q)}" /></div>
+        <div class="search">${icon("search", 15)}<input id="lead-search" type="search" aria-label="Search leads" placeholder="Search name, email, company..." value="${esc(state.leadFilters.q)}" /></div>
         <select class="select" id="lead-status" style="width:160px;height:32px">${["", "pending_approval", "queued", "sent", "denied", "failed"].map((value) => `<option value="${value}" ${state.leadFilters.status === value ? "selected" : ""}>${value ? (STATUS[value]?.[0] || value) : "All statuses"}</option>`).join("")}</select>
         <span class="spacer"></span>
         <span class="muted small" id="lead-count">Loading...</span>
@@ -1320,7 +1320,7 @@ async function loadLeads(token = state.renderToken) {
         <table class="table leads-table">
           <thead><tr><th>Person</th><th>Email</th><th>Role</th><th>Industry</th><th>Campaign</th><th>Status</th></tr></thead>
           <tbody>${data.items.map((lead) => `
-            <tr class="clickable" data-action="open-lead" data-id="${lead.id}">
+            <tr class="clickable" data-action="open-lead" data-id="${lead.id}" tabindex="0">
               <td><div class="cell-person"><div class="avatar sm ${avatarTone(lead.name)}">${esc(initials(lead.name))}</div><div><div class="name">${esc(lead.name)}</div><div class="sub">${esc(lead.company || "-")}</div></div></div></td>
               <td><span class="mono" style="font-size:11px">${esc(lead.email)}</span></td>
               <td class="cell-muted">${esc(lead.role || "-")}</td>
@@ -2188,7 +2188,7 @@ async function renderQueue(token) {
     <div class="card mt-16">
       <div class="card-head"><div><div class="card-title">Recently sent</div><div class="card-sub">The last ${fmtNumber(recent.length)} accepted sends. Click a row to open the lead.</div></div><div class="right"><span class="chip green">${fmtNumber(counts.sent)} total</span></div></div>
       ${recent.length ? `<div class="table-wrap"><table class="table recent-table"><thead><tr><th>Sent</th><th>Person</th><th>Campaign</th><th>Mailbox</th><th>Subject</th><th>Status</th></tr></thead><tbody>${recent.map((item) => `
-        <tr class="clickable" data-action="open-lead" data-id="${item.lead_id}"><td class="cell-nowrap">${esc(fmtDate(item.updated_at))}<div class="sub">${esc(fmtRelative(item.updated_at))}</div></td><td><div class="cell-person"><div class="avatar sm ${avatarTone(item.name)}">${esc(initials(item.name))}</div><div><div class="name">${esc(item.name)}</div><div class="sub">${esc(item.company || "")} · ${esc(item.email)}</div></div></div></td><td class="cell-muted">${esc(item.campaign_name)}</td><td class="cell-muted mono" style="font-size:10.5px">${esc(item.mailbox_email)}</td><td class="cell-muted truncate" style="max-width:280px" title="${esc(item.subject)}">${esc(item.subject)}</td><td>${statusChip(item.status)}</td></tr>
+        <tr class="clickable" data-action="open-lead" data-id="${item.lead_id}" tabindex="0"><td class="cell-nowrap">${esc(fmtDate(item.updated_at))}<div class="sub">${esc(fmtRelative(item.updated_at))}</div></td><td><div class="cell-person"><div class="avatar sm ${avatarTone(item.name)}">${esc(initials(item.name))}</div><div><div class="name">${esc(item.name)}</div><div class="sub">${esc(item.company || "")} · ${esc(item.email)}</div></div></div></td><td class="cell-muted">${esc(item.campaign_name)}</td><td class="cell-muted mono" style="font-size:10.5px">${esc(item.mailbox_email)}</td><td class="cell-muted truncate" style="max-width:280px" title="${esc(item.subject)}">${esc(item.subject)}</td><td>${statusChip(item.status)}</td></tr>
       `).join("")}</tbody></table></div>` : emptyState("No sends yet", "Approved drafts appear here after the worker sends them.", "send")}
     </div>
   `;
@@ -2418,6 +2418,7 @@ function navigate(page) {
 document.addEventListener("click", async (event) => {
   const target = event.target.closest("[data-action]");
   if (!target) return;
+  if (target.tagName === "A") event.preventDefault();
   const action = target.dataset.action;
   const id = target.dataset.id ? Number(target.dataset.id) : null;
 
@@ -2426,6 +2427,13 @@ document.addEventListener("click", async (event) => {
     return;
   }
   if (action === "refresh") {
+    renderPage();
+    return;
+  }
+  if (action === "clear-campaign") {
+    state.campaignId = null;
+    localStorage.removeItem("mailroom.campaign");
+    renderCampaignOptions();
     renderPage();
     return;
   }
@@ -2633,6 +2641,16 @@ document.addEventListener("click", async (event) => {
 });
 
 document.addEventListener("keydown", (event) => {
+  const active = document.activeElement;
+  if (
+    (event.key === "Enter" || event.key === " ") &&
+    active?.dataset?.action &&
+    !["BUTTON", "A", "INPUT", "TEXTAREA", "SELECT"].includes(active.tagName)
+  ) {
+    event.preventDefault();
+    active.click();
+    return;
+  }
   if (event.key === "Escape" && $("#modal-root")?.children.length) {
     closeModal();
     return;
