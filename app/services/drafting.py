@@ -212,5 +212,11 @@ def regenerate_draft(conn, draft_id: int) -> dict[str, Any] | None:
         "UPDATE leads SET status = 'pending_approval', updated_at = ? WHERE id = ?",
         (db.now_iso(), lead["id"]),
     )
-    db.audit(conn, "draft_regenerated", "draft", draft_id, {"lead_id": lead["id"]})
+    db.audit(
+        conn,
+        "draft_regenerated",
+        "draft",
+        draft_id,
+        {"lead_id": lead["id"], "email": lead["email"], "name": lead["name"]},
+    )
     return db.one(conn, "SELECT * FROM drafts WHERE id = ?", (draft_id,))
