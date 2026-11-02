@@ -48,7 +48,7 @@ def test_deny_is_terminal_and_can_suppress(seeded):
     with db.transaction() as conn:
         result = approvals.deny_draft(conn, draft["id"], "Not a fit", suppress=True)
     assert result["draft"]["status"] == "denied"
-    assert result["lead"]["status"] == "denied"
+    assert result["lead"]["status"] == "suppressed"
     suppression = db.one(
         seeded,
         "SELECT * FROM suppression WHERE email = ?",

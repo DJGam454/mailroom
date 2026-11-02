@@ -32,6 +32,9 @@ def test_approval_api(seeded):
         assert sent.status_code == 200
         recent = client.get("/api/queue?status=sent&limit=1").json()
         assert recent["items"][0]["id"] == queue_id
+        detail = client.get(f"/api/leads/{pending['items'][0]['lead_id']}").json()
+        assert detail["message"]["status"] == "sent"
+        assert detail["queue"]["mailbox_email"]
 
 
 def test_repeat_send_blocked_across_campaigns(seeded):
@@ -90,6 +93,7 @@ def test_queue_filters_by_campaign(seeded):
         assert queue["items"]
         assert all(item["campaign_id"] == pending["campaign_id"] for item in queue["items"])
         assert queue["counts"]["queued"] >= 1
+        assert queue["sending_paused"] is False
 
 
 def test_send_now_retries_failed_item(seeded):
@@ -146,6 +150,69 @@ def test_auto_approval_is_rejected(seeded):
     with TestClient(app) as client:
         response = client.post("/api/campaigns", json={"name": "Auto campaign", "approval_mode": "auto"})
         assert response.status_code == 422
+
+
+def test_suppression_cancels_pending_work(seeded):
+    from app import db
+
+    with TestClient(app) as client:
+        pending = client.get("/api/approvals?page_size=1").json()["items"][0]
+        approved = client.post(f"/api/approvals/{pending['draft_id']}/approve", json={})
+        assert approved.status_code == 200
+        queue_id = approved.json()["queue"]["id"]
+        suppressed = client.post(
+            "/api/suppression",
+            json={"email": pending["email"], "reason": "asked to stop"},
+        )
+        assert suppressed.status_code == 200
+        assert suppressed.json()["drafts_denied"] == 1
+        assert suppressed.json()["queue_cancelled"] == 1
+        lead = db.one(seeded, "SELECT status FROM leads WHERE id = ?", (pending["lead_id"],))
+        draft = db.one(seeded, "SELECT status FROM drafts WHERE id = ?", (pending["draft_id"],))
+        queue = db.one(seeded, "SELECT status FROM send_queue WHERE id = ?", (queue_id,))
+        assert lead["status"] == "suppressed"
+        assert draft["status"] == "denied"
+        assert queue["status"] == "cancelled"
+
+
+def test_deny_with_suppress(seeded):
+    from app import db
+
+    with TestClient(app) as client:
+        pending = client.get("/api/approvals?page_size=1").json()["items"][0]
+        denied = client.post(
+            f"/api/approvals/{pending['draft_id']}/deny",
+            json={"reason": "asked to stop", "suppress": True},
+        )
+        assert denied.status_code == 200
+        assert client.get("/api/suppression").json()["items"]
+        lead = db.one(seeded, "SELECT status FROM leads WHERE id = ?", (pending["lead_id"],))
+        assert lead["status"] == "suppressed"
+
+
+def test_bounced_lead_cannot_be_approved(seeded):
+    with TestClient(app) as client:
+        pending = client.get("/api/approvals?page_size=1").json()["items"][0]
+        seeded.execute("UPDATE leads SET status = 'bounced' WHERE id = ?", (pending["lead_id"],))
+        seeded.commit()
+        response = client.post(f"/api/approvals/{pending['draft_id']}/approve", json={})
+        assert response.status_code == 400
+        assert "cannot be approved" in response.json()["detail"]
+
+
+def test_denied_draft_is_terminal(seeded):
+    with TestClient(app) as client:
+        pending = client.get("/api/approvals?page_size=1").json()["items"][0]
+        denied = client.post(f"/api/approvals/{pending['draft_id']}/deny", json={"reason": "not a fit"})
+        assert denied.status_code == 200
+        edited = client.patch(
+            f"/api/drafts/{pending['draft_id']}",
+            json={"subject": "Try again", "body": "This should fail."},
+        )
+        assert edited.status_code == 400
+        assert "terminal" in edited.json()["detail"]
+        regenerated = client.post(f"/api/drafts/{pending['draft_id']}/regenerate")
+        assert regenerated.status_code == 400
 
 
 def test_approval_search(seeded):

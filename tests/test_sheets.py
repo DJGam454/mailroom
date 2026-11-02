@@ -86,6 +86,14 @@ def test_write_tab_preserves_helper_columns():
     assert worksheet.values[1][1] == "updated"
 
 
+def test_normalize_spreadsheet_id():
+    assert sheets._normalize_spreadsheet_id(" abc123 ") == "abc123"
+    assert (
+        sheets._normalize_spreadsheet_id("https://docs.google.com/spreadsheets/d/abc123/edit#gid=0")
+        == "abc123"
+    )
+
+
 def test_parse_sheet_time_iso_and_serial():
     assert sheets.parse_sheet_time("2026-11-02T10:00:00Z") is not None
     assert sheets.parse_sheet_time("2026-11-02T10:00:00+00:00") is not None
