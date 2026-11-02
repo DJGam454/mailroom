@@ -29,6 +29,18 @@ def test_approval_api(seeded):
         assert queue["items"]
 
 
+def test_campaign_patch_api(seeded):
+    with TestClient(app) as client:
+        campaign = client.get("/api/campaigns").json()["items"][0]
+        response = client.patch(
+            f"/api/campaigns/{campaign['id']}",
+            json={"daily_limit": 99, "window_start": "08:00", "window_end": "18:00"},
+        )
+        assert response.status_code == 200
+        assert response.json()["daily_limit"] == 99
+        assert response.json()["window_start"] == "08:00"
+
+
 def test_campaign_and_leads_api(seeded):
     with TestClient(app) as client:
         campaigns = client.get("/api/campaigns").json()
@@ -44,6 +56,16 @@ def test_campaign_and_leads_api(seeded):
         assert client.get("/api/sheets/status").status_code == 200
         settings = client.get("/api/settings").json()["values"]
         assert settings["sender_name"]
+
+
+def test_suppression_api(seeded):
+    with TestClient(app) as client:
+        created = client.post("/api/suppression", json={"email": "stop@example.test", "reason": "manual"})
+        assert created.status_code == 200
+        assert client.get("/api/suppression").json()["items"]
+        removed = client.delete("/api/suppression/stop%40example.test")
+        assert removed.status_code == 200
+        assert removed.json()["deleted"] == 1
 
 
 def test_warmup_start_api(seeded):
