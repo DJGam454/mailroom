@@ -146,7 +146,8 @@ approvals and stops campaign sends. Warmup has its own pause controls.
 ## 5. Connect a real domain and inbox
 
 1. Add the domain under **Inboxes & domains**.
-2. Set the DKIM selector if it is not `mail`.
+2. Open the gear on the domain card and set the DKIM selector if it is not
+   `mail`. The same panel pauses the domain and labels the provider.
 3. Click **Check DNS**. SPF, DKIM, DMARC and MX are read-only checks.
 4. Add a mailbox under that domain.
 5. Choose the transport:

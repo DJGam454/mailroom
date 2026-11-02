@@ -288,7 +288,7 @@ app/
 scripts/
   import_icp.py        import a real ICPExtractor pack locally
   sync_sheets.py       command-line Sheets sync
-tests/                 48 backend tests
+tests/                 49 backend tests
 integrations/
   apps_script/         optional Gmail bridge
 docs/
@@ -306,7 +306,7 @@ docs/
 make check
 ```
 
-This compiles the Python, checks the JavaScript syntax and runs the 48-test
+This compiles the Python, checks the JavaScript syntax and runs the 49-test
 pytest suite. GitHub Actions runs the same checks on every push and pull
 request.
 
