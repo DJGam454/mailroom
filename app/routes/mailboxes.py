@@ -17,6 +17,7 @@ from app.services import dnscheck, sender
 router = APIRouter(prefix="/api", tags=["mailboxes"])
 
 DOMAIN_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$")
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 def _mailbox_rows(conn) -> list[dict[str, Any]]:
@@ -65,6 +66,8 @@ def create_mailbox(payload: MailboxCreate, conn=Conn) -> dict[str, Any]:
     if not domain:
         raise HTTPException(status_code=404, detail="Domain not found")
     email = payload.email.strip().lower()
+    if not EMAIL_RE.match(email):
+        raise HTTPException(status_code=400, detail="Enter a valid mailbox email address")
     if not email.endswith("@" + domain["name"]):
         raise HTTPException(status_code=400, detail=f"Email must end with @{domain['name']}")
     try:

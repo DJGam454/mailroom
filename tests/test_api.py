@@ -339,6 +339,22 @@ def test_campaign_and_leads_api(seeded):
         assert not any(key.endswith("_enc") for key in settings)
 
 
+def test_mailbox_create_validation(seeded):
+    with TestClient(app) as client:
+        domain = client.get("/api/domains").json()["items"][0]
+        bad = client.post(
+            "/api/mailboxes",
+            json={"domain_id": domain["id"], "email": "not-an-email"},
+        )
+        assert bad.status_code == 400
+        good = client.post(
+            "/api/mailboxes",
+            json={"domain_id": domain["id"], "email": f"new-inbox@{domain['name']}", "transport": "mock"},
+        )
+        assert good.status_code == 200
+        assert good.json()["item"]["email"] == f"new-inbox@{domain['name']}"
+
+
 def test_mailbox_edit_api(seeded):
     with TestClient(app) as client:
         mailbox = client.get("/api/mailboxes").json()["items"][0]
