@@ -186,9 +186,11 @@ const state = {
   campaignId: null,
   overview: null,
   approvals: { items: [], total: 0, pools: {} },
+  approvalQuery: "",
   selectedApproval: null,
   approvalChecked: new Set(),
   approvalBusy: false,
+  leadDraft: null,
   leads: { items: [], total: 0, page: 1, page_size: 50, pages: 1 },
   leadFilters: { q: "", status: "", page: 1, pageSize: 50 },
   inboxes: [],
@@ -614,6 +616,7 @@ async function renderOverview(token) {
       </div>
     </div>
 
+    ${stats.sending_paused ? `<div class="notice red" style="margin-bottom:14px"><strong>Sending is paused globally.</strong> New approvals are blocked and queued items will not send. Warmup runs separately. <a href="#/settings" style="text-decoration:underline">Change in Settings</a>.</div>` : ""}
     ${data.mock_only ? `<div class="notice green" style="margin-bottom:14px">Mock mode is on. ${fmtNumber(stats.active_mailboxes)} inboxes and ${fmtNumber(stats.active_domains)} domains are ready, and no message can leave this Mac.</div>` : `<div class="notice violet" style="margin-bottom:14px">At least one real transport is configured. Review mailbox caps and DNS before activating a campaign.</div>`}
 
     <div class="grid stat-grid">
@@ -759,6 +762,7 @@ async function renderApprovals(token) {
     <div class="page-head">
       <div><h1 class="page-title">Approvals</h1><div class="page-sub">${esc(PAGES.approvals.sub)}</div></div>
       <div class="page-actions">
+        <div class="search">${icon("search", 15)}<input id="approval-search" type="search" placeholder="Search name, email, company..." value="${esc(state.approvalQuery)}" /></div>
         <button class="btn" data-action="refresh">${icon("refresh", 15)} Refresh</button>
       </div>
     </div>
@@ -767,12 +771,22 @@ async function renderApprovals(token) {
       <div class="card approval-detail" id="approval-detail-card"></div>
     </div>
   `;
+  $("#approval-search").addEventListener(
+    "input",
+    debounce((event) => {
+      state.approvalQuery = event.target.value.trim();
+      state.selectedApproval = null;
+      state.approvalChecked = new Set();
+      loadApprovals();
+    }, 280),
+  );
   await loadApprovals(token);
 }
 
 async function loadApprovals(token = state.renderToken) {
   const query = new URLSearchParams({ page_size: "100" });
   if (state.campaignId) query.set("campaign_id", state.campaignId);
+  if (state.approvalQuery) query.set("q", state.approvalQuery);
   const data = await api(`/approvals?${query.toString()}`);
   if (token !== state.renderToken) return;
   state.approvals = data;
@@ -810,7 +824,7 @@ function renderApprovalList() {
             </div>
           </div>
         `;
-      }).join("") : emptyState("Nothing waiting", "Every draft has been approved or denied for this view.", "approvals")}
+      }).join("") : emptyState(state.approvalQuery ? "No matches" : "Nothing waiting", state.approvalQuery ? `No pending draft matches "${state.approvalQuery}".` : "Every draft has been approved or denied for this view.", "approvals")}
     </div>
   `;
   const selectAll = $("#approval-select-all");
@@ -935,11 +949,18 @@ async function approveDraft(draftId) {
   }
 }
 
+function draftItem(draftId) {
+  return (
+    (state.approvals.items || []).find((row) => Number(row.draft_id) === Number(draftId)) ||
+    (Number(state.leadDraft?.draft_id) === Number(draftId) ? state.leadDraft : null)
+  );
+}
+
 function openDenyModal(draftId) {
-  const item = selectedApprovalItem();
+  const item = draftItem(draftId);
   openModal({
     title: "Deny this email",
-    sub: item ? `${item.name} at ${item.company}` : "The draft will not be sent.",
+    sub: item ? `${item.name}${item.company ? ` at ${item.company}` : ""}` : "The draft will not be sent.",
     narrow: true,
     body: `
       <form id="modal-form">
@@ -968,8 +989,11 @@ function openDenyModal(draftId) {
 }
 
 function openEditDraftModal(draftId) {
-  const item = selectedApprovalItem();
-  if (!item) return;
+  const item = draftItem(draftId) || selectedApprovalItem();
+  if (!item) {
+    toast("Select the draft again before editing it.", "error");
+    return;
+  }
   openModal({
     title: "Edit draft",
     sub: "Saving puts the draft back in the pending queue. You still have to approve it.",
@@ -987,7 +1011,11 @@ function openEditDraftModal(draftId) {
         body: JSON.stringify({ subject: formData.get("subject"), body: formData.get("body") }),
       });
       toast("Draft updated. It is still waiting for approval.");
-      await loadApprovals();
+      if (state.page === "approvals") {
+        await loadApprovals();
+      } else if (state.page === "leads" && state.leadDraft?.lead_id) {
+        await openLeadModal(state.leadDraft.lead_id);
+      }
     },
   });
 }
@@ -1071,7 +1099,7 @@ function openCampaignModal() {
           <div class="form-grid">
             <div class="field full"><label for="camp-name">Campaign name</label><input class="input" id="camp-name" name="name" placeholder="NCR SME - November" required /></div>
             <div class="field"><label for="camp-status">Status</label><select class="select" id="camp-status" name="status"><option value="draft">Draft</option><option value="active" selected>Active</option><option value="paused">Paused</option></select></div>
-            <div class="field"><label for="camp-approval">Approval mode</label><select class="select" id="camp-approval" name="approval_mode"><option value="manual" selected>Manual - you approve every email</option><option value="auto">Auto - queue after drafting</option></select></div>
+            <div class="field"><label for="camp-approval">Approval mode</label><select class="select" id="camp-approval" name="approval_mode"><option value="manual" selected>Manual - you approve every email</option><option value="auto" disabled>Auto - not active yet</option></select></div>
           </div>
         </div>
         <div class="form-section">
@@ -1298,6 +1326,17 @@ async function openLeadModal(id) {
     const data = await api(`/leads/${id}`);
     const lead = data.lead;
     const draft = data.draft;
+    state.leadDraft = draft
+      ? {
+          draft_id: draft.id,
+          lead_id: lead.id,
+          name: lead.name,
+          company: lead.company,
+          email: lead.email,
+          subject: draft.subject,
+          body: draft.body,
+        }
+      : null;
     openModal({
       title: lead.name,
       sub: `${lead.role || "Role not set"} · ${lead.company || "Company not set"}`,
@@ -1317,7 +1356,7 @@ async function openLeadModal(id) {
         ${lead.website ? `<div class="mt-12 small muted">${icon("globe", 13)} <a href="${esc(lead.website)}" target="_blank" rel="noreferrer">${esc(lead.website)}</a></div>` : ""}
       `,
       footer: draft && draft.status === "pending"
-        ? `<button class="btn" data-action="close-modal">Close</button><button class="btn danger" data-action="deny" data-id="${draft.id}">Deny</button><button class="btn success" data-action="approve" data-id="${draft.id}">Approve & queue</button>`
+        ? `<button class="btn" data-action="close-modal">Close</button><button class="btn danger" data-action="deny" data-id="${draft.id}">Deny</button><button class="btn" data-action="edit-draft" data-id="${draft.id}">${icon("edit", 14)} Edit</button><button class="btn success" data-action="approve" data-id="${draft.id}">Approve & queue</button>`
         : `<button class="btn" data-action="close-modal">Close</button>`,
     });
   } catch (error) {
@@ -1409,6 +1448,7 @@ async function renderInboxes(token) {
   state.domains = domains.items || [];
   const totalCapacity = state.inboxes.reduce((sum, item) => sum + Number(item.daily_limit || 0), 0);
   const sentToday = state.inboxes.reduce((sum, item) => sum + Number(item.sent_today || 0), 0);
+  const warmupToday = state.inboxes.reduce((sum, item) => sum + Number(item.warmup_sent_today || 0), 0);
   const realCount = state.inboxes.filter((item) => item.transport !== "mock").length;
   $("#page").innerHTML = `
     <div class="page-head">
@@ -1419,7 +1459,7 @@ async function renderInboxes(token) {
       <div class="card stat-card"><div class="stat-label">Domains</div><div class="stat-value">${fmtNumber(state.domains.length)}</div><div class="stat-foot">${state.domains.filter((d) => d.status === "active").length} active</div></div>
       <div class="card stat-card"><div class="stat-label">Mailboxes</div><div class="stat-value">${fmtNumber(state.inboxes.length)}</div><div class="stat-foot">${realCount} real · ${state.inboxes.length - realCount} mock</div></div>
       <div class="card stat-card"><div class="stat-label">Daily capacity</div><div class="stat-value">${fmtNumber(totalCapacity)}</div><div class="stat-foot">${fmtNumber(sentToday)} sent today</div></div>
-      <div class="card stat-card"><div class="stat-label">Rotation</div><div class="stat-value">${fmtNumber(new Set(state.inboxes.map((m) => m.domain_id)).size)}</div><div class="stat-foot">domains in the pool</div></div>
+      <div class="card stat-card"><div class="stat-label">Sending today</div><div class="stat-value">${fmtNumber(sentToday + warmupToday)}</div><div class="stat-foot">${fmtNumber(sentToday)} campaign · ${fmtNumber(warmupToday)} warmup</div></div>
     </div>
     <div class="domain-grid grid mt-16">
       ${state.domains.map((domain) => `
@@ -1435,14 +1475,14 @@ async function renderInboxes(token) {
       <div class="card-head"><div><div class="card-title">Mailbox pool</div><div class="card-sub">Per-inbox caps and connection state.</div></div><div class="right"><button class="btn sm" data-action="new-mailbox">${icon("plus", 13)} Add mailbox</button></div></div>
       <div class="table-wrap">
         <table class="table mailbox-table">
-          <thead><tr><th>Mailbox</th><th>Domain</th><th>Transport</th><th>Campaigns</th><th>Today</th><th>Hour</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>Mailbox</th><th>Domain</th><th>Transport</th><th>Campaigns</th><th>Campaign / warmup</th><th>Hour</th><th>Status</th><th></th></tr></thead>
           <tbody>${state.inboxes.map((mailbox) => `
             <tr>
               <td><div class="cell-person"><div class="avatar sm ${avatarTone(mailbox.email)}">${esc(initials(mailbox.display_name || mailbox.email))}</div><div><div class="name">${esc(mailbox.display_name || mailbox.email.split("@")[0])}</div><div class="sub mono">${esc(mailbox.email)}</div></div></div></td>
               <td class="cell-muted">${esc(mailbox.domain_name)}</td>
               <td>${transportChip(mailbox.transport)}</td>
               <td class="cell-muted truncate" style="max-width:170px" title="${esc(mailbox.campaigns || "")}">${esc(mailbox.campaigns || "Unassigned")}</td>
-              <td><div class="usage-inline">${progress(mailbox.sent_today, mailbox.daily_limit, "green")}<span>${fmtNumber(mailbox.sent_today)}/${fmtNumber(mailbox.daily_limit)}</span></div></td>
+              <td><div class="usage-inline">${progress(mailbox.sent_today, mailbox.daily_limit, "green")}<span>${fmtNumber(mailbox.sent_today)}/${fmtNumber(mailbox.daily_limit)}</span></div><div class="sub">${fmtNumber(mailbox.warmup_sent_today)} warmup · ${fmtNumber(mailbox.combined_sent_today)} total</div></td>
               <td class="cell-muted">${fmtNumber(mailbox.sent_hour)}/${fmtNumber(mailbox.hourly_limit)}</td>
               <td>${mailbox.status === "active" ? '<span class="chip green">Active</span>' : '<span class="chip amber">Paused</span>'}</td>
               <td class="cell-actions"><button class="btn xs" data-action="test-mailbox" data-id="${mailbox.id}">Test</button><button class="btn xs ghost" data-action="${mailbox.status === "active" ? "pause-mailbox" : "resume-mailbox"}" data-id="${mailbox.id}">${mailbox.status === "active" ? "Pause" : "Resume"}</button></td>
@@ -1591,6 +1631,7 @@ async function renderDeliverability(token) {
   const daily = buildDailySeries(data.daily || []);
   const maxDaily = Math.max(1, ...daily.map((item) => item.sent));
   const sentToday = mailboxes.reduce((sum, item) => sum + Number(item.sent_today || 0), 0);
+  const warmupToday = mailboxes.reduce((sum, item) => sum + Number(item.warmup_sent_today || 0), 0);
   const capacity = mailboxes.reduce((sum, item) => sum + Number(item.daily_limit || 0), 0);
   const bounceToday = mailboxes.reduce((sum, item) => sum + Number(item.bounces_today || 0), 0);
 
@@ -1600,7 +1641,7 @@ async function renderDeliverability(token) {
       <div class="page-actions"><button class="btn" data-action="refresh">${icon("refresh", 15)} Refresh</button></div>
     </div>
     <div class="grid stat-grid">
-      <div class="card stat-card"><div class="stat-label">Sent today</div><div class="stat-value">${fmtNumber(sentToday)}</div><div class="stat-foot">of ${fmtNumber(capacity)} daily capacity</div></div>
+      <div class="card stat-card"><div class="stat-label">Sending today</div><div class="stat-value">${fmtNumber(sentToday + warmupToday)}</div><div class="stat-foot">${fmtNumber(sentToday)} campaign · ${fmtNumber(warmupToday)} warmup · ${fmtNumber(capacity)} campaign capacity</div></div>
       <div class="card stat-card"><div class="stat-label">Active domains</div><div class="stat-value">${fmtNumber(domains.filter((d) => d.status === "active").length)}</div><div class="stat-foot">${domains.length} configured</div></div>
       <div class="card stat-card"><div class="stat-label">Bounces today</div><div class="stat-value">${fmtNumber(bounceToday)}</div><div class="stat-foot">No reputation scoring yet</div></div>
       <div class="card stat-card"><div class="stat-label">DNS checks</div><div class="stat-value">${fmtNumber(domains.filter((d) => d.spf_status === "pass" && d.dmarc_status === "pass").length)}</div><div class="stat-foot">domains with SPF and DMARC pass</div></div>
@@ -1622,7 +1663,7 @@ async function renderDeliverability(token) {
             ${domains.map((domain) => `
               <div class="domain-row">
                 <div class="main"><div class="name">${esc(domain.name)}</div><div class="dns-pills">${dnsChip("SPF", domain.spf_status)}${dnsChip("DKIM", domain.dkim_status)}${dnsChip("DMARC", domain.dmarc_status)}</div></div>
-                <div class="domain-volume"><strong>${fmtNumber(domain.sent_today)}</strong> / ${fmtNumber(domain.daily_capacity)}<div>${fmtNumber(domain.mailbox_count)} inboxes</div></div>
+                <div class="domain-volume"><strong>${fmtNumber(domain.sent_today)}</strong> / ${fmtNumber(domain.daily_capacity)}<div>${fmtNumber(domain.mailbox_count)} inboxes · ${fmtNumber(domain.warmup_sent_today)} warmup</div></div>
                 <button class="btn xs" data-action="check-domain" data-id="${domain.id}">Check</button>
               </div>
             `).join("")}
@@ -1767,6 +1808,7 @@ function openWarmupSettings() {
           <div class="field"><label for="wu-cooldown">Pair cooldown (days)</label><input class="input" id="wu-cooldown" name="warmup_pair_cooldown_days" type="number" min="1" value="${esc(settings.pair_cooldown_days || 7)}" /></div>
           <div class="field"><label for="wu-reply">Reply rate (%)</label><input class="input" id="wu-reply" name="warmup_reply_rate" type="number" min="0" max="100" value="${Math.round(Number(settings.reply_rate || 0.3) * 100)}" /></div>
           <div class="field"><label for="wu-open">Open / read rate (%)</label><input class="input" id="wu-open" name="warmup_open_rate" type="number" min="0" max="100" value="${Math.round(Number(settings.open_rate || 0.8) * 100)}" /></div>
+          <div class="field"><label for="wu-important">Mark important rate (%)</label><input class="input" id="wu-important" name="warmup_important_rate" type="number" min="0" max="100" value="${Math.round(Number(settings.important_rate || 0.3) * 100)}" /></div>
           <div class="field"><label for="wu-gap-min">Minimum gap (seconds)</label><input class="input" id="wu-gap-min" name="warmup_min_gap_seconds" type="number" min="1" value="${esc(settings.min_gap || 5)}" /></div>
           <div class="field"><label for="wu-gap-max">Maximum gap (seconds)</label><input class="input" id="wu-gap-max" name="warmup_max_gap_seconds" type="number" min="1" value="${esc(settings.max_gap || 30)}" /></div>
           <div class="field"><label for="wu-window-start">Window start</label><input class="input" id="wu-window-start" name="warmup_window_start" type="time" value="${esc(settings.window_start || "00:00")}" /></div>
@@ -1786,6 +1828,7 @@ function openWarmupSettings() {
         warmup_pair_cooldown_days: formData.get("warmup_pair_cooldown_days"),
         warmup_reply_rate: String(Number(formData.get("warmup_reply_rate")) / 100),
         warmup_open_rate: String(Number(formData.get("warmup_open_rate")) / 100),
+        warmup_important_rate: String(Number(formData.get("warmup_important_rate")) / 100),
         warmup_min_gap_seconds: formData.get("warmup_min_gap_seconds"),
         warmup_max_gap_seconds: formData.get("warmup_max_gap_seconds"),
         warmup_window_start: formData.get("warmup_window_start"),
@@ -1804,7 +1847,12 @@ function openWarmupSettings() {
 async function warmupAction(action, id = null) {
   try {
     if (action === "start-all") {
-      openConfirm("Start warmup?", "This will start the ramp for all eligible mailboxes. In the demo they use the mock transport.", async () => {
+      const profiles = state.warmup?.profiles || [];
+      const real = profiles.filter((profile) => profile.transport && profile.transport !== "mock").length;
+      const message = real
+        ? `${real} mailbox(es) use a real transport. Warmup will send real email through them. Check DNS, caps and the gap settings first.`
+        : "This starts the ramp for all eligible mailboxes. The demo pool uses the mock transport, so nothing leaves this Mac.";
+      openConfirm("Start warmup?", message, async () => {
         const result = await api("/warmup/start", {
           method: "POST",
           body: JSON.stringify({ daily_limit: Number(state.warmup?.settings?.daily_limit || 10) }),
@@ -1965,16 +2013,18 @@ function renderSheetResult(result) {
   const pushed = result.pushed || {};
   const isTest = Boolean(result.spreadsheet && !result.pulled && !result.pushed);
   const tabs = result.tabs ? Object.values(result.tabs) : [];
+  const failure = result.error || result.detail || "";
   const summary = isTest
     ? `Connected to ${esc(result.spreadsheet)}. ${tabs.length} tabs ready: ${tabs.map(esc).join(", ")}.`
     : `Pulled leads ${pulled.leads?.updated ?? 0}, created ${pulled.leads?.created ?? 0}; campaigns ${pulled.campaigns?.updated ?? 0}; suppression ${pulled.suppression?.inserted ?? 0}. Pushed leads ${pushed.leads ?? 0}, campaigns ${pushed.campaigns ?? 0}, warmup ${pushed.warmup ?? 0}.`;
   box.innerHTML = `
     <div class="notice ${result.ok && !conflicts.length && !errors.length ? "green" : "red"}">
       <strong>${isTest ? "Connection test" : result.ok === false ? "Needs attention" : "Sync result"}</strong>
+      ${failure ? `<div class="mt-8">${esc(failure)}</div>` : ""}
       ${result.aborted_push ? `<div class="mt-8">${esc(result.aborted_push)}</div>` : ""}
       ${conflicts.length ? `<div class="mt-8">${conflicts.length} conflict(s) left untouched. Choose a policy or resolve the rows in the sheet.</div>` : ""}
       ${errors.length ? `<div class="mt-8">${errors.length} error(s).</div>` : ""}
-      ${!conflicts.length && !errors.length ? `<div class="mt-8">${summary}</div>` : ""}
+      ${!failure && !conflicts.length && !errors.length ? `<div class="mt-8">${summary}</div>` : ""}
     </div>
     ${conflicts.length || errors.length ? `<div class="code-block mt-8">${esc(JSON.stringify({ conflicts, errors }, null, 2))}</div>` : ""}
   `;
@@ -1983,10 +2033,11 @@ function renderSheetResult(result) {
 /* ----------------------------- queue ----------------------------- */
 
 async function renderQueue(token) {
-  const data = await api("/queue");
+  const [data, sentData] = await Promise.all([api("/queue"), api("/queue?status=sent&limit=12")]);
   if (token !== state.renderToken) return;
   state.queue = data;
   const items = data.items || [];
+  const recent = sentData.items || [];
   const counts = data.counts || {};
   $("#page").innerHTML = `
     <div class="page-head">
@@ -2004,6 +2055,12 @@ async function renderQueue(token) {
       ${items.length ? `<div class="table-wrap"><table class="table"><thead><tr><th>Scheduled</th><th>Person</th><th>Campaign</th><th>Mailbox</th><th>Status</th><th>Attempts</th><th></th></tr></thead><tbody>${items.map((item) => `
         <tr><td class="cell-nowrap">${esc(fmtDate(item.scheduled_at))}<div class="sub">${esc(fmtRelative(item.scheduled_at))}</div></td><td><div class="cell-person"><div class="avatar sm ${avatarTone(item.name)}">${esc(initials(item.name))}</div><div><div class="name">${esc(item.name)}</div><div class="sub">${esc(item.company)} · ${esc(item.email)}</div></div></div></td><td class="cell-muted">${esc(item.campaign_name)}</td><td class="cell-muted mono" style="font-size:10.5px">${esc(item.mailbox_email)}</td><td>${statusChip(item.status)}</td><td class="cell-muted">${fmtNumber(item.attempts)}</td><td class="cell-actions">${item.status !== "sent" ? `<button class="btn xs" data-action="send-now" data-id="${item.id}">Send now</button><button class="btn xs ghost" data-action="cancel-queue" data-id="${item.id}">Cancel</button>` : ""}</td></tr>
       `).join("")}</tbody></table></div>` : emptyState("Queue is empty", "Approve a draft to reserve a mailbox and a send slot.", "queue")}
+    </div>
+    <div class="card mt-16">
+      <div class="card-head"><div><div class="card-title">Recently sent</div><div class="card-sub">The last ${fmtNumber(recent.length)} accepted sends. Click a row to open the lead.</div></div><div class="right"><span class="chip green">${fmtNumber(counts.sent)} total</span></div></div>
+      ${recent.length ? `<div class="table-wrap"><table class="table recent-table"><thead><tr><th>Sent</th><th>Person</th><th>Campaign</th><th>Mailbox</th><th>Subject</th><th>Status</th></tr></thead><tbody>${recent.map((item) => `
+        <tr class="clickable" data-action="open-lead" data-id="${item.lead_id}"><td class="cell-nowrap">${esc(fmtDate(item.scheduled_at))}<div class="sub">${esc(fmtRelative(item.scheduled_at))}</div></td><td><div class="cell-person"><div class="avatar sm ${avatarTone(item.name)}">${esc(initials(item.name))}</div><div><div class="name">${esc(item.name)}</div><div class="sub">${esc(item.company || "")} · ${esc(item.email)}</div></div></div></td><td class="cell-muted">${esc(item.campaign_name)}</td><td class="cell-muted mono" style="font-size:10.5px">${esc(item.mailbox_email)}</td><td class="cell-muted truncate" style="max-width:280px" title="${esc(item.subject)}">${esc(item.subject)}</td><td>${statusChip(item.status)}</td></tr>
+      `).join("")}</tbody></table></div>` : emptyState("No sends yet", "Approved drafts appear here after the worker sends them.", "send")}
     </div>
   `;
 }
@@ -2089,6 +2146,7 @@ async function renderSettings(token) {
           <div class="form-section">
             <div class="form-section-title">Safety and agent hook</div>
             <div class="toggle-row"><div><div class="toggle-label">Require DNS pass before real sending</div><div class="toggle-hint">Mock mode never blocks. This is a guard for SMTP or Apps Script.</div></div><label class="switch"><input type="checkbox" name="require_dns_pass" ${state.settings.require_dns_pass === "1" ? "checked" : ""}/><span></span></label></div>
+            <div class="toggle-row"><div><div class="toggle-label">Pause all sending</div><div class="toggle-hint">Blocks new approvals and stops the campaign queue. Warmup keeps running on its own switch.</div></div><label class="switch"><input type="checkbox" name="sending_paused" ${state.settings.sending_paused === "1" ? "checked" : ""}/><span></span></label></div>
             <div class="field mt-12"><label for="set-webhook">Agent webhook</label><input class="input" id="set-webhook" name="agent_webhook" value="${esc(state.settings.agent_webhook || "")}" placeholder="https://your-agent.example/draft" /><div class="hint">Optional. POST a lead and receive JSON with subject and body. Leave empty to use the local template.</div></div>
           </div>
           <div class="row mt-16"><button class="btn primary" type="submit">${icon("check", 14)} Save settings</button><span class="muted small">Stored in the local database.</span></div>
@@ -2124,6 +2182,7 @@ async function renderSettings(token) {
       default_offer: form.default_offer.value,
       agent_webhook: form.agent_webhook.value,
       require_dns_pass: form.require_dns_pass.checked ? "1" : "0",
+      sending_paused: form.sending_paused.checked ? "1" : "0",
     };
     try {
       await api("/settings", { method: "PATCH", body: JSON.stringify({ values }) });
@@ -2336,13 +2395,17 @@ document.addEventListener("click", async (event) => {
   }
   if (action === "suppression-remove") {
     const email = target.dataset.email;
-    try {
-      await api(`/suppression/${encodeURIComponent(email)}`, { method: "DELETE" });
-      toast("Address removed from suppression.");
-      renderPage();
-    } catch (error) {
-      toast(error.message, "error");
-    }
+    openConfirm(
+      "Remove from suppression?",
+      `${email} will be eligible for future campaigns again. The old sends are not deleted.`,
+      async () => {
+        await api(`/suppression/${encodeURIComponent(email)}`, { method: "DELETE" });
+        toast("Address removed from suppression.");
+        renderPage();
+      },
+      "Remove",
+      true,
+    );
     return;
   }
   if (action === "test-mailbox") {
@@ -2381,12 +2444,20 @@ document.addEventListener("click", async (event) => {
     await warmupAction("pause-one", id);
     return;
   }
-  if (action === "sheet-test") {
-    await sheetTest();
-    return;
-  }
-  if (action === "sheet-sync") {
-    await sheetSync(target.dataset.direction || "both", target.dataset.dry === "1");
+  if (action === "sheet-test" || action === "sheet-sync") {
+    if (target.dataset.busy) return;
+    const original = target.innerHTML;
+    target.dataset.busy = "1";
+    target.disabled = true;
+    target.innerHTML = `${icon("refresh", 14)} Working...`;
+    try {
+      if (action === "sheet-test") await sheetTest();
+      else await sheetSync(target.dataset.direction || "both", target.dataset.dry === "1");
+    } finally {
+      delete target.dataset.busy;
+      target.disabled = false;
+      target.innerHTML = original;
+    }
     return;
   }
   if (action === "queue-tick") {
